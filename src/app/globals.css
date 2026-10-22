@@ -1,0 +1,121 @@
+@import "tailwindcss";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+
+/*
+ * Design tokens. The virtual display uses only these colours so the palette can be reproduced as
+ * an LVGL style table (docs/hardware-porting.md). Status colours are restrained and carry meaning:
+ * green = running/ok, blue = in progress/info, amber = attention, red = fault/destructive.
+ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-ink-950: #0a0c0d;
+  --color-ink-900: #111416;
+  --color-ink-850: #161a1c;
+  --color-ink-800: #1c2023;
+  --color-ink-700: #272c30;
+  --color-ink-600: #353b40;
+  --color-ink-500: #4a5157;
+
+  --color-fg: #f2f4f5;
+  --color-fg-muted: #a8b0b6;
+  --color-fg-dim: #707a81;
+
+  --color-ok: #3cc46f;
+  --color-ok-soft: #173d26;
+  --color-info: #4aa3ec;
+  --color-info-soft: #16324a;
+  --color-warn: #f2a93b;
+  --color-warn-soft: #43300f;
+  --color-danger: #ef5a5a;
+  --color-danger-soft: #451a1a;
+
+  --text-2xs: 10px;
+  --text-2xs--line-height: 12px;
+  --text-xs: 11px;
+  --text-xs--line-height: 14px;
+}
+
+/* High-contrast display theme: pure black, brighter separators and secondary text. */
+[data-display-theme="contrast"] {
+  --color-ink-950: #000000;
+  --color-ink-900: #000000;
+  --color-ink-850: #0b0b0b;
+  --color-ink-800: #141414;
+  --color-ink-700: #3a3a3a;
+  --color-ink-600: #5a5a5a;
+  --color-fg-muted: #d6d6d6;
+  --color-fg-dim: #a0a0a0;
+}
+
+html,
+body {
+  background: var(--color-ink-950);
+  color: var(--color-fg);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Embedded-style press feedback: instant colour change, no layout shift. */
+.touch {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.touch:not(:disabled):active {
+  filter: brightness(1.35);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Screen transition that LVGL can reproduce (short fade + 4px slide). */
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.screen-enter {
+  animation: screen-in 120ms ease-out;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-enter,
+  .spin {
+    animation: none;
+  }
+}
+
+.unknown-swatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--color-ink-600) 0 4px,
+    var(--color-ink-800) 4px 8px
+  );
+}
