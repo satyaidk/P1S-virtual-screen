@@ -1,6 +1,10 @@
 /** Typed client for this app's own /api/bambu endpoints (credentials stay on the server). */
 
 export interface SetupStatus {
+  /** true on Vercel: Bambu Cloud only (view-only), session kept in an encrypted cookie. */
+  hosted: boolean;
+  /** Deployment misconfiguration that blocks sign-in (e.g. missing P1S_SESSION_SECRET). */
+  setupError: string | null;
   myPrinter: {
     name: string;
     model: string;

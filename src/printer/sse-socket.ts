@@ -18,8 +18,13 @@ export class SseSocket implements SocketLike {
   private source: EventSource | null;
   private closed = false;
 
-  constructor(private readonly base: string) {
-    this.source = new EventSource(`${base}/stream`);
+  private readonly base: string;
+
+  /** `url` is the bridge base, optionally with a query for the stream (e.g. "/api/bridge?resume=1"). */
+  constructor(url: string) {
+    const [base = "", query] = url.split("?");
+    this.base = base;
+    this.source = new EventSource(`${base}/stream${query ? `?${query}` : ""}`);
     this.source.onopen = () => this.onopen?.({});
     this.source.onmessage = (ev) => this.onmessage?.({ data: ev.data });
     this.source.onerror = () => {

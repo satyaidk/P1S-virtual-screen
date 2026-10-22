@@ -177,7 +177,8 @@ describe("BridgePrinterProvider (fake bridge)", () => {
     sockets[0]!.drop();
     await flush();
     expect(await inFlight).toEqual({ ok: false, message: "Bridge connection lost" });
-    expect(provider.getState().connection.status).toBe("disconnected");
+    // Within the reconnect grace period the display keeps showing the last good state.
+    expect(provider.getState().connection.status).toBe("connected");
 
     await advance(clock, 999);
     expect(sockets).toHaveLength(1);
@@ -188,6 +189,44 @@ describe("BridgePrinterProvider (fake bridge)", () => {
     expect(sockets).toHaveLength(2);
     await advance(clock, 2);
     expect(sockets).toHaveLength(3);
+    // Grace (5 s) is over and the link has not recovered: now the display shows it.
+    await advance(clock, 2100);
+    expect(provider.getState().connection.status).not.toBe("connected");
+  });
+
+  it("hides a quick stream reconnect and resumes without a full status request", async () => {
+    const { clock, sockets, provider } = setup();
+    const statuses: string[] = [];
+    provider.subscribe((s) => statuses.push(s.connection.status));
+    await provider.connect();
+    expect(sockets[0]!.url).toBe("/api/bridge");
+    sockets[0]!.open();
+    sockets[0]!.receive(HELLO_LAN);
+    sockets[0]!.receive({ type: "printer_link", status: "connected" });
+    sockets[0]!.receive({ type: "report", payload: { print: { nozzle_temper: 200 } } });
+
+    statuses.length = 0;
+    sockets[0]!.drop("recycled");
+    await advance(clock, 1001);
+    expect(sockets[1]!.url).toBe("/api/bridge?resume=1");
+    sockets[1]!.open();
+    sockets[1]!.receive(HELLO_LAN);
+    sockets[1]!.receive({ type: "printer_link", status: "connecting" });
+    sockets[1]!.receive({ type: "printer_link", status: "connected" });
+    expect(statuses.every((s) => s === "connected")).toBe(true);
+    await advance(clock, 6000);
+    expect(provider.getState().connection.status).toBe("connected");
+    expect(provider.getState().nozzle.current).toBe(200);
+  });
+
+  it("shows a user disconnect immediately", async () => {
+    const { sockets, provider } = setup();
+    await provider.connect();
+    sockets[0]!.open();
+    sockets[0]!.receive(HELLO_LAN);
+    sockets[0]!.receive({ type: "printer_link", status: "connected" });
+    await provider.disconnect();
+    expect(provider.getState().connection.status).toBe("disconnected");
   });
 
   it("caps backoff", () => {

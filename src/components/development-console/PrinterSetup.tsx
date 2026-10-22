@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
+import { usePrinter, useRuntime } from "@/hooks/usePrinter";
 import { cn } from "@/lib/cn";
 import { bambuApi, type AccountPrinter, type SetupStatus } from "./bambu-api";
 
@@ -26,6 +27,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
  * Alternatives (collapsed): Bambu Cloud sign-in (read-only) and a fully manual LAN connection.
  */
 export function PrinterSetup() {
+  const runtime = useRuntime();
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [printers, setPrinters] = useState<AccountPrinter[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -67,6 +69,9 @@ export function PrinterSetup() {
     try {
       await action();
       await refresh();
+      // Re-open the display stream so it picks up the new printer/session right away.
+      await runtime.provider.disconnect();
+      await runtime.provider.connect();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -82,7 +87,8 @@ export function PrinterSetup() {
           busy={busy}
           onDisconnect={() => run("disconnect", bambuApi.disconnect)}
         />
-        {status && <MyPrinterCard status={status} busy={busy} run={run} />}
+        {status?.hosted && <HostedNotice setupError={status.setupError} />}
+        {status && !status.hosted && <MyPrinterCard status={status} busy={busy} run={run} />}
         {error && (
           <p
             role="alert"
@@ -92,31 +98,76 @@ export function PrinterSetup() {
             {error}
           </p>
         )}
-        <Collapsible
-          title="View through Bambu Cloud instead (read-only, sign in)"
-          defaultOpen={signedIn}
-        >
-          {status && !signedIn && <SignIn status={status} busy={busy} run={run} />}
-          {status && signedIn && (
-            <AccountPrinters
-              status={status}
-              printers={printers}
-              busy={busy}
-              run={run}
-              onSignOut={() =>
-                run("logout", async () => {
-                  await bambuApi.logout();
-                  setPrinters(null);
-                })
-              }
-            />
-          )}
-        </Collapsible>
-        <Collapsible title="A different printer (IP, serial and access code)">
-          <ManualLan busy={busy} run={run} />
-        </Collapsible>
+        {status?.hosted ? (
+          <div className="rounded-md border border-ink-600 p-3" data-testid="hosted-sign-in">
+            {!signedIn && <SignIn status={status} busy={busy} run={run} />}
+            {signedIn && (
+              <AccountPrinters
+                status={status}
+                printers={printers}
+                busy={busy}
+                run={run}
+                onSignOut={() =>
+                  run("logout", async () => {
+                    await bambuApi.logout();
+                    setPrinters(null);
+                  })
+                }
+              />
+            )}
+          </div>
+        ) : (
+          <Collapsible
+            title="View through Bambu Cloud instead (read-only, sign in)"
+            defaultOpen={signedIn}
+          >
+            {status && !signedIn && <SignIn status={status} busy={busy} run={run} />}
+            {status && signedIn && (
+              <AccountPrinters
+                status={status}
+                printers={printers}
+                busy={busy}
+                run={run}
+                onSignOut={() =>
+                  run("logout", async () => {
+                    await bambuApi.logout();
+                    setPrinters(null);
+                  })
+                }
+              />
+            )}
+          </Collapsible>
+        )}
+        {status && !status.hosted && (
+          <Collapsible title="A different printer (IP, serial and access code)">
+            <ManualLan busy={busy} run={run} />
+          </Collapsible>
+        )}
       </div>
     </Panel>
+  );
+}
+
+/** Shown on the hosted (Vercel) site: what works here and what needs the home computer. */
+function HostedNotice({ setupError }: { setupError: string | null }) {
+  return (
+    <div className="flex flex-col gap-2" data-testid="hosted-notice">
+      {setupError && (
+        <p
+          role="alert"
+          className="rounded-md border border-warn/60 bg-warn-soft px-2 py-1.5 text-fg"
+        >
+          {setupError}
+        </p>
+      )}
+      <p className="text-2xs leading-4 text-fg-muted">
+        <strong className="text-fg">Online version.</strong> Sign in with the Bambu account your
+        printer is bound to and the display shows it live through Bambu Cloud, from anywhere. It is{" "}
+        <strong className="text-fg">view-only</strong>: Bambu blocks control over the cloud, and the
+        access code only works from a computer on the printer&apos;s Wi-Fi (run{" "}
+        <code className="font-mono">npm run dev</code> there for controls).
+      </p>
+    </div>
   );
 }
 
@@ -275,11 +326,13 @@ function CurrentConnection({
   busy: string | null;
   onDisconnect: () => void;
 }) {
-  const link = status?.link;
+  // What the display actually receives (accurate in both local and hosted mode).
+  const connection = usePrinter((s) => s.state.connection);
+  const link = { status: connection.status, error: connection.lastError };
   const tone =
-    link?.status === "connected"
+    link.status === "connected"
       ? "text-ok"
-      : link?.status === "connecting"
+      : link.status === "connecting"
         ? "text-info"
         : "text-danger";
   return (
@@ -301,9 +354,9 @@ function CurrentConnection({
                 : `LAN ${status.printer.host}`}{" "}
               ·{" "}
               <span className={tone} data-testid="link-status">
-                {link?.status}
+                {link.status}
               </span>
-              {link?.error && <span className="text-fg-dim"> — {link.error}</span>}
+              {link.error && <span className="text-fg-dim"> — {link.error}</span>}
             </div>
           </div>
           <Button onClick={onDisconnect} disabled={busy !== null}>
@@ -413,7 +466,9 @@ function SignIn({ status, busy, run }: { status: SetupStatus; busy: string | nul
         </Button>
       </div>
       <p className="text-2xs text-fg-dim">
-        Your password is sent once to Bambu Lab by this app&apos;s local server and is never stored.
+        {status.hosted
+          ? "Your password is sent once to Bambu Lab and never stored. The sign-in is kept only in an encrypted cookie in this browser."
+          : "Your password is sent once to Bambu Lab by this app's local server and is never stored."}
       </p>
     </form>
   );
@@ -472,29 +527,35 @@ function AccountPrinters({
             >
               View via Bambu Cloud
             </Button>
-            <span className="text-fg-dim">or</span>
-            <input
-              className={cn(input, "w-36")}
-              placeholder="Printer IP, e.g. 192.168.1.50"
-              value={hosts[p.serial] ?? ""}
-              onChange={(e) => setHosts({ ...hosts, [p.serial]: e.target.value.trim() })}
-            />
-            <Button
-              disabled={busy !== null || !hosts[p.serial] || !p.hasAccessCode}
-              onClick={() =>
-                void run("lan", () => bambuApi.connectAccount(p.serial, "lan", hosts[p.serial]))
-              }
-            >
-              Connect via LAN
-            </Button>
+            {!status.hosted && (
+              <>
+                <span className="text-fg-dim">or</span>
+                <input
+                  className={cn(input, "w-36")}
+                  placeholder="Printer IP, e.g. 192.168.1.50"
+                  value={hosts[p.serial] ?? ""}
+                  onChange={(e) => setHosts({ ...hosts, [p.serial]: e.target.value.trim() })}
+                />
+                <Button
+                  disabled={busy !== null || !hosts[p.serial] || !p.hasAccessCode}
+                  onClick={() =>
+                    void run("lan", () => bambuApi.connectAccount(p.serial, "lan", hosts[p.serial]))
+                  }
+                >
+                  Connect via LAN
+                </Button>
+              </>
+            )}
           </div>
         </div>
       ))}
-      <p className="text-2xs leading-4 text-fg-dim">
-        Bambu Cloud works from anywhere but is read-only (current firmware rejects unsigned
-        control). LAN gives control when the printer has LAN Only + Developer Mode enabled; find its
-        IP on the printer under Settings → Network.
-      </p>
+      {!status.hosted && (
+        <p className="text-2xs leading-4 text-fg-dim">
+          Bambu Cloud works from anywhere but is read-only (current firmware rejects unsigned
+          control). LAN gives control when the printer has LAN Only + Developer Mode enabled; find
+          its IP on the printer under Settings → Network.
+        </p>
+      )}
     </div>
   );
 }

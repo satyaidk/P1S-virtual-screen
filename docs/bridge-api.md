@@ -25,6 +25,23 @@ code. The saved connection is marked `hostSource: "auto"`; when the printer is l
 different IP (DHCP), the link is restarted at the new address. `BAMBU_PRINTER_HOST` or a typed IP
 skips discovery.
 
+## Hosted mode (Vercel)
+
+Detected with `VERCEL=1` (or `P1S_HOSTED=1`). A serverless function cannot reach the LAN, keep a
+process alive or write files, so `src/server/hosted-service.ts` replaces the local service:
+
+- **Session:** the Bambu token, MQTT user id and chosen printer are sealed with AES-256-GCM
+  (key from `P1S_SESSION_SECRET`) into the `p1s_session` cookie (HttpOnly, Secure,
+  SameSite=Strict, at most 90 days). An in-progress email-code/2FA sign-in uses `p1s_login`
+  (15 minutes). Without the secret, sign-in answers 503 with setup instructions.
+- **Printer:** after sign-in the built-in serial is selected automatically if it is bound to the
+  account (or the only printer on it).
+- **Stream:** each `GET /api/bridge/stream` opens its own MQTT connection to Bambu Cloud and ends
+  after 280 s (Vercel's limit is 300 s). The browser reconnects with `?resume=1`, so no extra
+  `pushall` is sent, and keeps showing "connected" for a 5 s grace period, so the display doesn't flicker.
+- **Commands:** read-only; `request_full_status` succeeds, everything else answers with the
+  read-only reason. LAN/access-code connect answers 400.
+
 ## Ways to connect
 
 | Mode                                | Needs                                                    | Data                | Control                                                                                                                                                                   |
