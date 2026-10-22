@@ -11,24 +11,30 @@ npm install
 npm run dev            # then open http://localhost:3000 on the same computer
 ```
 
-1. In **Printer connection**, sign in with the Bambu account your P1S is bound to (the one you use
-   in Bambu Handy). Use your password, or **Email me a code** and type the code Bambu sends.
-2. Your printers appear in the list. Pick one:
-   - **View via Bambu Cloud**: works from anywhere, **read-only** (current firmware rejects
-     control commands from third-party apps over the cloud).
-   - **Connect via LAN**: enter the printer's IP (printer screen → Settings → Network). Pause,
-     resume, stop, speed, temperatures and light need **LAN Only + Developer Mode** enabled on
-     the printer.
-3. The display shows live temperatures, progress, AMS trays, errors… Open `/display` for the screen
-   alone.
+The printer's serial number (`01P00C662003044`) is built in (`src/server/printer-config.ts`) and
+its IP address is **found automatically**: Bambu printers announce themselves on the local network
+every few seconds (UDP 1990/2021, the same way Bambu Studio finds them). So the only thing to type is
+the **access code**:
 
-No Bambu account? Use **LAN only, without a Bambu account** with the IP, serial number and access
-code shown on the printer.
+1. On the printer: **Settings → Network (WLAN) → Access Code** (8 characters). This is the LAN
+   code, not the 6-digit PIN from Handy's "Bind with PIN code".
+2. In the console's **Printer connection**, type it and press **Connect**. The card shows
+   "Found on your network at 192.168.x.x" once the printer has announced itself.
+3. The display shows live temperatures, progress, AMS trays and errors. Open `/display` for the
+   screen alone. After a restart it reconnects by itself, and it follows the printer if the router
+   gives it a new IP.
 
-You don't need to "Bind with PIN code" again: that Handy step links a printer to an account once,
-and your printer is already bound. Credentials stay on this computer: the password is forwarded once
-to Bambu and never stored, and the session token is saved in `.data/` (git-ignored, owner-only).
-See [docs/bridge-api.md](docs/bridge-api.md).
+Controls (pause, resume, stop, speed, temperatures, light) need **LAN Only + Developer Mode**
+enabled on the printer; without it you still get live data. The computer running the app must be on
+the same network as the printer. If discovery is blocked (some routers/firewalls block UDP
+broadcasts), use **Printer not found? Enter its IP** under the access code field, or set
+`BAMBU_PRINTER_HOST` in `.env.local`.
+
+Optional alternatives (collapsed in the console): **View through Bambu Cloud** (sign in, read-only,
+works from anywhere) and **A different printer** (IP, serial and access code by hand).
+
+The access code stays on this computer: it is saved in `.data/` (git-ignored, owner-only) and never
+sent to the browser. See [docs/bridge-api.md](docs/bridge-api.md).
 
 > **Status:** the live connection is implemented and tested against a real MQTT broker with a
 > simulated P1S, and against mocked Bambu cloud responses. It has **not** yet been run against a

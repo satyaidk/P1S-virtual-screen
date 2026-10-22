@@ -1,6 +1,15 @@
 /** Typed client for this app's own /api/bambu endpoints (credentials stay on the server). */
 
 export interface SetupStatus {
+  myPrinter: {
+    name: string;
+    model: string;
+    maskedSerial: string;
+    host: string | null;
+    hostSource: "configured" | "discovered" | "saved" | null;
+    lastSeen: number | null;
+    discoveryProblems: string[];
+  };
   cloud: { signedIn: boolean; account: string | null; region: "global" | "china" | null };
   pendingLogin: { kind: "verifyCode" | "tfa"; account: string } | null;
   printer: {
@@ -44,6 +53,9 @@ export const bambuApi = {
     call<LoginStep>("email-code", { region, account }),
   verify: (code: string) => call<LoginStep>("verify", { code }),
   devices: () => call<{ devices: AccountPrinter[] }>("devices").then((r) => r.devices),
+  /** Built-in serial + auto-discovered IP: only the printer's access code is needed. */
+  connectAccessCode: (accessCode: string, host?: string) =>
+    call<SetupStatus>("connect", { source: "access-code", accessCode, host: host || undefined }),
   connectAccount: (serial: string, mode: "cloud" | "lan", host?: string) =>
     call<SetupStatus>("connect", { source: "account", serial, mode, host }),
   connectManual: (host: string, serial: string, accessCode: string) =>

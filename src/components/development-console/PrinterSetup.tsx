@@ -19,10 +19,11 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * Connect the display to the real printer:
- *  1. Sign in to the Bambu account the printer is bound to (password or emailed code),
- *  2. pick the printer, 3. stream it via Bambu Cloud (read-only) or the LAN (control).
+ * Connect the display to the real printer. The serial number is built in and the printer's IP is
+ * found on the network automatically, so the normal flow is: type the access code, press Connect.
  * Credentials go to this app's local server only; the browser never stores them.
+ *
+ * Alternatives (collapsed): Bambu Cloud sign-in (read-only) and a fully manual LAN connection.
  */
 export function PrinterSetup() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
@@ -81,6 +82,7 @@ export function PrinterSetup() {
           busy={busy}
           onDisconnect={() => run("disconnect", bambuApi.disconnect)}
         />
+        {status && <MyPrinterCard status={status} busy={busy} run={run} />}
         {error && (
           <p
             role="alert"
@@ -90,30 +92,175 @@ export function PrinterSetup() {
             {error}
           </p>
         )}
-        {status && !signedIn && <SignIn status={status} busy={busy} run={run} />}
-        {status && signedIn && (
-          <AccountPrinters
-            status={status}
-            printers={printers}
-            busy={busy}
-            run={run}
-            onSignOut={() =>
-              run("logout", async () => {
-                await bambuApi.logout();
-                setPrinters(null);
-              })
-            }
-          />
-        )}
-        <ManualLan busy={busy} run={run} />
-        <p className="text-2xs leading-4 text-fg-dim">
-          <strong className="text-fg-muted">About “Bind with PIN code”:</strong> binding links a
-          printer to a Bambu account and is done once in Bambu Handy. Your printer is already bound,
-          so this page just signs in to that account to read it. If a printer is missing from the
-          list, bind it in Handy first.
-        </p>
+        <Collapsible
+          title="View through Bambu Cloud instead (read-only, sign in)"
+          defaultOpen={signedIn}
+        >
+          {status && !signedIn && <SignIn status={status} busy={busy} run={run} />}
+          {status && signedIn && (
+            <AccountPrinters
+              status={status}
+              printers={printers}
+              busy={busy}
+              run={run}
+              onSignOut={() =>
+                run("logout", async () => {
+                  await bambuApi.logout();
+                  setPrinters(null);
+                })
+              }
+            />
+          )}
+        </Collapsible>
+        <Collapsible title="A different printer (IP, serial and access code)">
+          <ManualLan busy={busy} run={run} />
+        </Collapsible>
       </div>
     </Panel>
+  );
+}
+
+function Collapsible({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-md border border-ink-700">
+      <button
+        type="button"
+        className="w-full px-2.5 py-2 text-left text-2xs font-semibold text-fg-muted hover:text-fg"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+      >
+        {open ? "▾" : "▸"} {title}
+      </button>
+      {open && <div className="px-2.5 pb-2.5">{children}</div>}
+    </div>
+  );
+}
+
+function ago(ts: number | null): string {
+  if (ts === null) return "";
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  return s < 2 ? "just now" : `${s}s ago`;
+}
+
+/** The built-in printer: serial from the code, IP from discovery; user types the access code. */
+function MyPrinterCard({
+  status,
+  busy,
+  run,
+}: {
+  status: SetupStatus;
+  busy: string | null;
+  run: Run;
+}) {
+  const [code, setCode] = useState("");
+  const [host, setHost] = useState("");
+  const [showHost, setShowHost] = useState(false);
+  const mine = status.myPrinter;
+  const connectedHere =
+    status.printer?.mode === "lan" && status.printer.maskedSerial === mine.maskedSerial;
+
+  const network =
+    mine.hostSource === "discovered"
+      ? { tone: "bg-ok", text: `Found on your network at ${mine.host} (${ago(mine.lastSeen)})` }
+      : mine.hostSource === "configured"
+        ? { tone: "bg-ok", text: `IP set in configuration: ${mine.host}` }
+        : mine.hostSource === "saved"
+          ? { tone: "bg-warn", text: `Not announcing right now — last known IP ${mine.host}` }
+          : { tone: "bg-info", text: "Searching your network for the printer…" };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    void run("access-code", () =>
+      bambuApi.connectAccessCode(code, showHost ? host : undefined).then(() => setCode("")),
+    );
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      className="flex flex-col gap-2.5 rounded-md border border-ink-600 p-3"
+      data-testid="my-printer"
+    >
+      <div>
+        <div className="text-sm font-semibold">{mine.name}</div>
+        <div className="text-2xs text-fg-dim">
+          {mine.model} · SN {mine.maskedSerial} (built in)
+        </div>
+      </div>
+      <div
+        className="flex items-center gap-2 text-2xs text-fg-muted"
+        data-testid="discovery-status"
+      >
+        <span className={cn("size-2 shrink-0 rounded-full", network.tone)} aria-hidden />
+        {network.text}
+      </div>
+      {mine.discoveryProblems.length > 0 && mine.hostSource === null && (
+        <p className="text-2xs text-warn">
+          Network discovery is blocked ({mine.discoveryProblems.join("; ")}). Enter the IP below.
+        </p>
+      )}
+      <Field label="Access code">
+        <div className="flex gap-2">
+          <input
+            className={cn(input, "w-40 font-mono tracking-widest")}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="e.g. 12345678"
+            value={code}
+            onChange={(e) => setCode(e.target.value.trim())}
+            data-testid="access-code"
+          />
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={busy !== null || code.length < 6 || (showHost && !host)}
+            data-testid="connect-access-code"
+          >
+            {busy === "access-code"
+              ? mine.host || showHost
+                ? "Connecting…"
+                : "Looking for printer…"
+              : connectedHere
+                ? "Reconnect"
+                : "Connect"}
+          </Button>
+        </div>
+      </Field>
+      <p className="text-2xs leading-4 text-fg-dim">
+        On the printer:{" "}
+        <strong className="text-fg-muted">Settings → Network (WLAN) → Access Code</strong> (8
+        characters). This is the LAN code, not the 6-digit PIN from “Bind with PIN code”. Controls
+        need <strong className="text-fg-muted">LAN Only + Developer Mode</strong> enabled on the
+        printer; otherwise you still get live data.
+      </p>
+      <button
+        type="button"
+        className="self-start text-2xs text-info hover:underline"
+        onClick={() => setShowHost(!showHost)}
+      >
+        {showHost ? "Use automatic discovery" : "Printer not found? Enter its IP"}
+      </button>
+      {showHost && (
+        <Field label="Printer IP (printer screen → Settings → Network)">
+          <input
+            className={cn(input, "w-48")}
+            placeholder="192.168.1.50"
+            value={host}
+            onChange={(e) => setHost(e.target.value.trim())}
+            data-testid="access-code-host"
+          />
+        </Field>
+      )}
+    </form>
   );
 }
 
@@ -353,63 +500,43 @@ function AccountPrinters({
 }
 
 function ManualLan({ busy, run }: { busy: string | null; run: Run }) {
-  const [open, setOpen] = useState(false);
   const [host, setHost] = useState("");
   const [serial, setSerial] = useState("");
   const [code, setCode] = useState("");
   return (
-    <div className="rounded-md border border-ink-700">
-      <button
-        type="button"
-        className="w-full px-2.5 py-2 text-left text-2xs font-semibold text-fg-muted"
-        onClick={() => setOpen(!open)}
-      >
-        {open ? "▾" : "▸"} LAN only, without a Bambu account
-      </button>
-      {open && (
-        <form
-          className="grid grid-cols-3 gap-2 px-2.5 pb-2.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run("manual", () =>
-              bambuApi.connectManual(host, serial, code).then(() => setCode("")),
-            );
-          }}
-        >
-          <Field label="Printer IP">
-            <input
-              className={input}
-              value={host}
-              onChange={(e) => setHost(e.target.value.trim())}
-            />
-          </Field>
-          <Field label="Serial number">
-            <input
-              className={input}
-              value={serial}
-              onChange={(e) => setSerial(e.target.value.trim())}
-            />
-          </Field>
-          <Field label="LAN access code">
-            <input
-              className={input}
-              type="password"
-              value={code}
-              onChange={(e) => setCode(e.target.value.trim())}
-            />
-          </Field>
-          <p className="col-span-2 self-center text-2xs text-fg-dim">
-            Shown on the printer: Settings → Network (WLAN).
-          </p>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={busy !== null || !host || !serial || !code}
-          >
-            Connect
-          </Button>
-        </form>
-      )}
-    </div>
+    <form
+      className="grid grid-cols-3 gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void run("manual", () =>
+          bambuApi.connectManual(host, serial, code).then(() => setCode("")),
+        );
+      }}
+    >
+      <Field label="Printer IP">
+        <input className={input} value={host} onChange={(e) => setHost(e.target.value.trim())} />
+      </Field>
+      <Field label="Serial number">
+        <input
+          className={input}
+          value={serial}
+          onChange={(e) => setSerial(e.target.value.trim())}
+        />
+      </Field>
+      <Field label="LAN access code">
+        <input
+          className={input}
+          type="password"
+          value={code}
+          onChange={(e) => setCode(e.target.value.trim())}
+        />
+      </Field>
+      <p className="col-span-2 self-center text-2xs text-fg-dim">
+        Only for a printer other than the built-in one.
+      </p>
+      <Button type="submit" variant="primary" disabled={busy !== null || !host || !serial || !code}>
+        Connect
+      </Button>
+    </form>
   );
 }

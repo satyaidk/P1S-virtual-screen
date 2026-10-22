@@ -6,6 +6,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const schema = z.discriminatedUnion("source", [
+  /** Default flow: built-in serial + discovered IP; only the access code is typed. */
+  z.object({
+    source: z.literal("access-code"),
+    accessCode: z.string().trim().min(1).max(32),
+    host: z.string().trim().max(253).optional(),
+  }),
   z.object({
     source: z.literal("account"),
     serial: z.string().min(8).max(32),
@@ -25,9 +31,17 @@ export async function POST(req: Request) {
   return handle(req, schema, async (body) => {
     const service = getBridgeService();
     await service.init();
-    if (body.source === "account")
-      await service.connectAccountPrinter(body.serial, body.mode, body.host);
-    else await service.connectLanManual(body.host, body.serial, body.accessCode, body.name);
+    switch (body.source) {
+      case "access-code":
+        await service.connectWithAccessCode(body.accessCode, body.host || undefined);
+        break;
+      case "account":
+        await service.connectAccountPrinter(body.serial, body.mode, body.host);
+        break;
+      case "manual":
+        await service.connectLanManual(body.host, body.serial, body.accessCode, body.name);
+        break;
+    }
     return service.status();
   });
 }
