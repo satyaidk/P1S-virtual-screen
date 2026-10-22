@@ -38,6 +38,10 @@ export interface PublicDevice {
 }
 
 export interface PublicStatus {
+  /** true on Vercel-style deployments (Bambu Cloud only, cookie sessions). */
+  hosted: boolean;
+  /** Configuration problem that blocks sign-in (hosted only). */
+  setupError: string | null;
   /** The printer this app is configured for (serial built in; IP discovered). */
   myPrinter: {
     name: string;
@@ -165,6 +169,8 @@ export class BridgeService {
     const found = this.discovery.get(mine.serial);
     const saved = printer?.mode === "lan" && printer.serial === mine.serial ? printer.host : null;
     return {
+      hosted: false,
+      setupError: null,
       myPrinter: {
         name: found?.name || mine.name,
         model: mine.model,

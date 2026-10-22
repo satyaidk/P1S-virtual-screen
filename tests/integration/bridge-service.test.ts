@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BridgeService } from "@/server/bridge-service";
 import { PrinterDiscovery } from "@/server/discovery";
 import type { MqttClientLike, MqttConnect } from "@/server/printer-link";
@@ -241,8 +241,9 @@ describe("BridgeService — access code only", () => {
     announce("192.168.1.64");
     await svc.connectWithAccessCode("12345678");
     announce("192.168.1.65");
-    await new Promise((r) => setTimeout(r, 10));
-    expect(connects.at(-1)?.url).toBe("mqtts://192.168.1.65:8883");
+    // The service saves the new IP to disk before reconnecting: wait for the outcome, not a
+    // fixed delay (slow CI disks made a 10 ms sleep flaky).
+    await vi.waitFor(() => expect(connects.at(-1)?.url).toBe("mqtts://192.168.1.65:8883"));
     expect(svc.status().printer?.host).toBe("192.168.1.65");
     discovery.stop();
   });

@@ -46,7 +46,8 @@ export class ConnectionManager {
   private status: ManagerStatus = "idle";
 
   constructor(
-    private readonly url: string,
+    /** A function is re-evaluated on every (re)connect, e.g. to add a resume flag. */
+    private readonly url: string | (() => string),
     private readonly factory: SocketFactory,
     private readonly clock: Clock,
     private readonly handlers: ConnectionHandlers,
@@ -87,7 +88,7 @@ export class ConnectionManager {
     this.setStatus("connecting");
     let socket: SocketLike;
     try {
-      socket = this.factory(this.url);
+      socket = this.factory(typeof this.url === "function" ? this.url() : this.url);
     } catch (error) {
       this.scheduleRetry(error instanceof Error ? error.message : "socket creation failed");
       return;

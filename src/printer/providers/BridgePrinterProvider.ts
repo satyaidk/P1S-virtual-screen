@@ -23,6 +23,11 @@ export interface BridgeProviderOptions {
   socketFactory?: SocketFactory;
   /** How long to wait for the bridge's command_result. */
   commandTimeoutMs?: number;
+  /**
+   * Keep showing "connected" this long after the stream drops, so a routine reconnect (hosted
+   * streams are recycled every few minutes) does not flash "Offline" on the display.
+   */
+  reconnectGraceMs?: number;
 }
 
 /**
@@ -36,6 +41,9 @@ export class BridgePrinterProvider implements PrinterProvider {
   private readonly clock: Clock;
   private readonly manager: ConnectionManager;
   private readonly commandTimeoutMs: number;
+  private readonly reconnectGraceMs: number;
+  private graceTimer: TimerHandle | null = null;
+  private stopping = false;
   private caps: ProviderCapabilities = {
     commands: new Set(),
     unsupportedReason: "Printer not set up",
@@ -53,8 +61,14 @@ export class BridgePrinterProvider implements PrinterProvider {
     this.clock = options.clock ?? systemClock;
     this.commandTimeoutMs = options.commandTimeoutMs ?? 12_000;
     this.state = deepFreeze(createUnknownState("live"));
+    this.reconnectGraceMs = options.reconnectGraceMs ?? 5000;
+    // After the first data, reconnects ask the server not to re-request a full printer status.
+    const url = () =>
+      this.state.connection.lastTelemetryAt === null
+        ? options.bridgeUrl
+        : `${options.bridgeUrl}${options.bridgeUrl.includes("?") ? "&" : "?"}resume=1`;
     this.manager = new ConnectionManager(
-      options.bridgeUrl,
+      url,
       options.socketFactory ?? sseSocketFactory,
       this.clock,
       {
@@ -69,11 +83,14 @@ export class BridgePrinterProvider implements PrinterProvider {
   }
 
   async connect(): Promise<void> {
+    this.stopping = false;
     this.event("connection", "info", "Connecting to printer bridge");
     this.manager.start();
   }
 
   async disconnect(): Promise<void> {
+    this.stopping = true;
+    this.clearGrace();
     this.manager.stop();
     this.failAllPending("Disconnected");
   }
@@ -114,6 +131,8 @@ export class BridgePrinterProvider implements PrinterProvider {
   }
 
   dispose(): void {
+    this.stopping = true;
+    this.clearGrace();
     this.manager.stop();
     this.failAllPending("Disposed");
     this.stateEmitter.clear();
@@ -131,7 +150,28 @@ export class BridgePrinterProvider implements PrinterProvider {
     if (status === "waiting")
       this.event("connection", "warn", `Bridge unavailable: ${detail ?? ""}`);
     if (status === "open") this.event("connection", "info", "Bridge connected");
-    this.updateConnection(status === "waiting" ? "App server unreachable" : this.printerError);
+    const error = status === "waiting" ? "App server unreachable" : this.printerError;
+    if (
+      status !== "open" &&
+      !this.stopping &&
+      this.reconnectGraceMs > 0 &&
+      this.state.connection.status === "connected" &&
+      this.graceTimer === null
+    ) {
+      this.graceTimer = this.clock.setTimeout(() => {
+        this.graceTimer = null;
+        this.updateConnection(
+          this.socketStatus === "waiting" ? "App server unreachable" : this.printerError,
+        );
+      }, this.reconnectGraceMs);
+      return;
+    }
+    this.updateConnection(error);
+  }
+
+  private clearGrace(): void {
+    if (this.graceTimer !== null) this.clock.clearTimeout(this.graceTimer);
+    this.graceTimer = null;
   }
 
   private onMessage(raw: unknown): void {
@@ -240,9 +280,15 @@ export class BridgePrinterProvider implements PrinterProvider {
   private updateConnection(error: string | null): void {
     let status: ConnectionStatus = "disconnected";
     if (this.socketStatus === "open" && this.printerLink === "connected") status = "connected";
-    else if (
-      this.socketStatus === "connecting" ||
-      (this.socketStatus === "open" && this.printerLink === "connecting")
+    // Within the reconnect grace period only a recovered link is shown; anything else waits.
+    if (this.graceTimer !== null) {
+      if (status !== "connected") return;
+      this.clearGrace();
+    }
+    if (
+      status !== "connected" &&
+      (this.socketStatus === "connecting" ||
+        (this.socketStatus === "open" && this.printerLink === "connecting"))
     ) {
       status = "connecting";
     }

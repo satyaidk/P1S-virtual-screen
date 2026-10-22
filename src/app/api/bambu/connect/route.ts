@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { getBridgeService } from "@/server/bridge-service";
-import { handle } from "@/server/http";
+import { isHosted } from "@/server/deployment";
+import { getHostedService, HOSTED_LAN_UNAVAILABLE } from "@/server/hosted-service";
+import { CloudError } from "@/server/bambu-cloud";
+import { handle, handleHosted } from "@/server/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +31,12 @@ const schema = z.discriminatedUnion("source", [
 ]);
 
 export async function POST(req: Request) {
+  if (isHosted()) {
+    return handleHosted(req, schema, (body) => {
+      if (body.source !== "account") throw new CloudError(HOSTED_LAN_UNAVAILABLE, 400);
+      return getHostedService().connectAccountPrinter(req, body.serial, body.mode);
+    });
+  }
   return handle(req, schema, async (body) => {
     const service = getBridgeService();
     await service.init();

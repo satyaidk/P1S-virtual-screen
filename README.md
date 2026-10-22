@@ -46,10 +46,23 @@ sent to the browser. See [docs/bridge-api.md](docs/bridge-api.md).
 | `/display`                    | Display only (kiosk). Integer scale that fits the window, or `?scale=1`                                      |
 | `/?demo=1`, `/display?demo=1` | Development only: simulated printer with fault injection                                                     |
 
-**Run it locally for your printer.** The live connection keeps an MQTT session open and stores your
-Bambu session on disk, which serverless hosting (e.g. the Vercel preview deployments of this repo)
-cannot do, and a public URL must not expose printer control. Hosted deployments therefore only
-serve demo mode (`/?demo=1`); the setup routes answer with an explanation.
+## Online version (Vercel)
+
+The Vercel deployment cannot reach your home network, so the access code (LAN) does not work there.
+Instead it uses **Bambu Cloud**: sign in with your Bambu account (password or emailed code) and the
+display shows your printer live from anywhere. It is **view-only**, because Bambu rejects control
+commands from third-party apps over the cloud.
+
+One-time setup in Vercel:
+
+1. Vercel → your project → **Settings → Environment Variables**.
+2. Add `P1S_SESSION_SECRET` with any random text of 32+ characters (e.g. the output of
+   `openssl rand -base64 32`). Apply it to Production and Preview.
+3. **Redeploy** (Deployments → ⋯ → Redeploy) so the variable takes effect.
+
+Your Bambu sign-in is kept only in an encrypted, HttpOnly cookie in your browser; nothing is stored
+on Vercel. Each display opens its own connection to Bambu's cloud and reconnects every few minutes
+(Vercel limits one request to 5 minutes) without the screen flickering.
 
 ## What's inside
 

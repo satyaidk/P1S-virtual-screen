@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { getBridgeService } from "@/server/bridge-service";
-import { handle } from "@/server/http";
+import { isHosted } from "@/server/deployment";
+import { getHostedService } from "@/server/hosted-service";
+import { handle, handleHosted } from "@/server/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +15,11 @@ const schema = z.object({
 
 /** Password sign-in. The password is forwarded to Bambu once and never stored. */
 export async function POST(req: Request) {
+  if (isHosted()) {
+    return handleHosted(req, schema, ({ region, account, password }) =>
+      getHostedService().loginWithPassword(region, account, password),
+    );
+  }
   return handle(req, schema, async ({ region, account, password }) => {
     const service = getBridgeService();
     await service.init();

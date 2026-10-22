@@ -104,7 +104,7 @@ export class PrinterLink {
     return this.config.mode === "cloud" ? CLOUD_COMMANDS : LAN_SUPPORTED_COMMANDS;
   }
 
-  start(config: LinkConfig): void {
+  start(config: LinkConfig, options: { requestFullStatus?: boolean } = {}): void {
     this.stop(null);
     this.config = config;
     this.state = createUnknownState("live", config.name);
@@ -131,7 +131,7 @@ export class PrinterLink {
         if (err) this.setStatus("disconnected", `Subscribe failed: ${err.message}`);
       });
       this.publishRaw({ info: { sequence_id: this.nextSeq(), command: "get_version" } });
-      this.requestFullStatus(true);
+      if (options.requestFullStatus !== false) this.requestFullStatus(true);
     });
     client.on("message", (_topic, payload) => {
       if (this.client === client) this.onReport(payload);

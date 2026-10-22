@@ -122,6 +122,14 @@ describe("PrinterLink with a real MQTT broker", () => {
     const { link } = newLink();
     link.start(config());
     await vi.waitFor(() => expect(link.current.status).toBe("connected"));
+    // Wait for the reply to the connect-time pushall first: if it arrived after our partial report
+    // it would (correctly, being newer) overwrite it, which made this test timing-dependent.
+    await vi.waitFor(() => {
+      const snaps: BridgeServerMessage[] = [];
+      link.subscribe((m) => snaps.push(m))();
+      const snap = snaps.find((m) => m.type === "snapshot");
+      expect(snap?.type === "snapshot" && snap.state.ams.units?.length).toBe(1);
+    });
     printer.publish(`device/${SERIAL}/report`, JSON.stringify({ print: { nozzle_temper: 201.5 } }));
     const late: BridgeServerMessage[] = [];
     await vi.waitFor(() => {
