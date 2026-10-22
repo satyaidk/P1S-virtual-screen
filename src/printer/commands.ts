@@ -110,6 +110,7 @@ const fail = (reason: string): ValidationResult => ({ ok: false, reason });
 
 export interface ValidationContext {
   supported: ReadonlySet<CommandType>;
+  unsupportedReason?: string | null;
   now: number;
   staleAfterMs?: number;
 }
@@ -130,7 +131,9 @@ export function validateCommand(
   state: PrinterState,
   ctx: ValidationContext,
 ): ValidationResult {
-  if (!ctx.supported.has(command.type)) return fail("Not supported by this connection");
+  if (!ctx.supported.has(command.type)) {
+    return fail(ctx.unsupportedReason ?? "Not supported by this connection");
+  }
   if (state.connection.status !== "connected") return fail("Printer is offline");
   if (
     command.type !== "request_full_status" &&

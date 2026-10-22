@@ -9,3 +9,6 @@ next-env.d.ts
 .env*
 !.env.example
 .DS_Store
+
+# Saved Bambu session / printer selection (server-side secrets)
+.data/

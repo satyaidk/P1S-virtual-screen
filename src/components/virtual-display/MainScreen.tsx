@@ -128,7 +128,11 @@ function OfflinePanel({
         <WifiOff size={28} className="text-danger" aria-hidden />
       )}
       <p className="text-sm font-bold">
-        {connecting ? "Connecting to printer…" : "Printer offline"}
+        {connecting
+          ? "Connecting to printer…"
+          : lastError?.startsWith("Not set up")
+            ? "No printer connected"
+            : "Printer offline"}
       </p>
       {!connecting && <p className="text-xs text-fg-muted">{lastError ?? "No connection"}</p>}
       <p className="text-2xs text-fg-dim">Last data {formatAge(ageMs)}</p>

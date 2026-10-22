@@ -12,7 +12,7 @@ function apply(state: PrinterState, report: unknown, now = NOW): PrinterState {
 }
 
 describe("mergeTelemetry", () => {
-  const full = apply(createUnknownState("lan-bridge"), pushall);
+  const full = apply(createUnknownState("live"), pushall);
 
   it("builds a complete state from a full report", () => {
     expect(full.status).toBe("idle");

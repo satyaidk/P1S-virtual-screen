@@ -60,6 +60,7 @@ export class CommandManager {
   validate(command: PrinterCommand): ValidationResult {
     return validateCommand(command, this.provider.getState(), {
       supported: this.provider.capabilities.commands,
+      unsupportedReason: this.provider.capabilities.unsupportedReason,
       now: this.clock.now(),
       staleAfterMs: this.options.staleAfterMs,
     });

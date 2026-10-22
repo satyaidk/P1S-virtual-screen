@@ -1,10 +1,10 @@
-import type { CommandResult, PrinterCommand } from "../commands";
+import type { CommandResult, CommandType, PrinterCommand } from "../commands";
 import { ConnectionManager, type ManagerStatus, type SocketFactory } from "../connection-manager";
-import { LAN_SUPPORTED_COMMANDS } from "../protocol/command-builders";
 import { bridgeServerMessageSchema, type BridgeCommandMessage } from "../protocol/bridge-protocol";
 import { mergeTelemetry } from "../protocol/state-merge";
 import { parseReport } from "../protocol/telemetry-parser";
 import { systemClock, type Clock, type TimerHandle } from "../simulation/clock";
+import { sseSocketFactory } from "../sse-socket";
 import { createUnknownState } from "../state";
 import type { ConnectionStatus, PrinterState } from "../types";
 import { deepFreeze } from "@/lib/structural-sharing";
@@ -15,55 +15,61 @@ import {
   type ProviderEvent,
 } from "./PrinterProvider";
 
-export interface LanProviderOptions {
-  /** WebSocket URL of the local bridge, e.g. ws://127.0.0.1:8787/v1/stream. Not a secret. */
+export interface BridgeProviderOptions {
+  /** Base URL of the bridge endpoints (default: this app's own `/api/bridge`). Not a secret. */
   bridgeUrl: string;
   clock?: Clock;
+  /** Transport; defaults to Server-Sent Events + HTTP POST. Tests inject a fake socket. */
   socketFactory?: SocketFactory;
   /** How long to wait for the bridge's command_result. */
   commandTimeoutMs?: number;
 }
 
 /**
- * Adapter for a real P1S reached through a local bridge (docs/bridge-api.md).
- *
- * The browser never talks MQTT/TLS to the printer and never holds the LAN access code. The bridge
- * forwards raw reports; this provider parses and merges them with the same protocol modules the
- * tests cover.
- *
- * STATUS: implemented against the documented contract and unit-tested with a fake socket. It has
- * NOT been verified against a physical P1S.
+ * Real printer data. The browser never talks MQTT to the printer and never holds credentials:
+ * this app's server (src/server) owns the Bambu Cloud / LAN MQTT session and forwards reports.
+ * Reports are parsed and merged here with the same protocol modules the tests cover.
  */
-export class LanPrinterProvider implements PrinterProvider {
-  readonly kind = "lan-bridge" as const;
-  readonly capabilities: ProviderCapabilities = { commands: LAN_SUPPORTED_COMMANDS };
+export class BridgePrinterProvider implements PrinterProvider {
+  readonly kind = "live" as const;
 
   private readonly clock: Clock;
   private readonly manager: ConnectionManager;
   private readonly commandTimeoutMs: number;
+  private caps: ProviderCapabilities = {
+    commands: new Set(),
+    unsupportedReason: "Printer not set up",
+  };
   private state: PrinterState;
   private socketStatus: ManagerStatus = "idle";
   private printerLink: "connected" | "connecting" | "disconnected" = "disconnected";
+  private printerError: string | null = null;
   private requestSeq = 0;
   private pending = new Map<string, { resolve: (r: CommandResult) => void; timer: TimerHandle }>();
   private readonly stateEmitter = new Emitter<PrinterState>();
   private readonly eventEmitter = new Emitter<ProviderEvent>();
 
-  constructor(private readonly options: LanProviderOptions) {
+  constructor(private readonly options: BridgeProviderOptions) {
     this.clock = options.clock ?? systemClock;
-    this.commandTimeoutMs = options.commandTimeoutMs ?? 8000;
-    this.state = deepFreeze(createUnknownState("lan-bridge"));
-    const factory: SocketFactory =
-      options.socketFactory ??
-      ((url) => new WebSocket(url) as unknown as ReturnType<SocketFactory>);
-    this.manager = new ConnectionManager(options.bridgeUrl, factory, this.clock, {
-      onStatus: (status, detail) => this.onSocketStatus(status, detail),
-      onMessage: (data) => this.onMessage(data),
-    });
+    this.commandTimeoutMs = options.commandTimeoutMs ?? 12_000;
+    this.state = deepFreeze(createUnknownState("live"));
+    this.manager = new ConnectionManager(
+      options.bridgeUrl,
+      options.socketFactory ?? sseSocketFactory,
+      this.clock,
+      {
+        onStatus: (status, detail) => this.onSocketStatus(status, detail),
+        onMessage: (data) => this.onMessage(data),
+      },
+    );
+  }
+
+  get capabilities(): ProviderCapabilities {
+    return this.caps;
   }
 
   async connect(): Promise<void> {
-    this.event("connection", "info", `Connecting to bridge ${this.options.bridgeUrl}`);
+    this.event("connection", "info", "Connecting to printer bridge");
     this.manager.start();
   }
 
@@ -85,20 +91,25 @@ export class LanPrinterProvider implements PrinterProvider {
   }
 
   sendCommand(command: PrinterCommand): Promise<CommandResult> {
-    if (!LAN_SUPPORTED_COMMANDS.has(command.type)) {
-      return Promise.resolve({ ok: false, message: "Command not supported over LAN" });
+    if (!this.caps.commands.has(command.type)) {
+      return Promise.resolve({
+        ok: false,
+        message: this.caps.unsupportedReason ?? "Command not supported",
+      });
     }
     const requestId = `req-${++this.requestSeq}`;
     const message: BridgeCommandMessage = { type: "command", requestId, command };
-    if (!this.manager.send(JSON.stringify(message))) {
-      return Promise.resolve({ ok: false, message: "Bridge not connected" });
-    }
     return new Promise((resolve) => {
       const timer = this.clock.setTimeout(() => {
         this.pending.delete(requestId);
         resolve({ ok: false, message: "No response from bridge" });
       }, this.commandTimeoutMs);
       this.pending.set(requestId, { resolve, timer });
+      if (!this.manager.send(JSON.stringify(message))) {
+        this.clock.clearTimeout(timer);
+        this.pending.delete(requestId);
+        resolve({ ok: false, message: "Bridge not connected" });
+      }
     });
   }
 
@@ -120,7 +131,7 @@ export class LanPrinterProvider implements PrinterProvider {
     if (status === "waiting")
       this.event("connection", "warn", `Bridge unavailable: ${detail ?? ""}`);
     if (status === "open") this.event("connection", "info", "Bridge connected");
-    this.updateConnection(status === "waiting" ? (detail ?? "Bridge unavailable") : null);
+    this.updateConnection(status === "waiting" ? "App server unreachable" : this.printerError);
   }
 
   private onMessage(raw: unknown): void {
@@ -143,29 +154,54 @@ export class LanPrinterProvider implements PrinterProvider {
     }
     const msg = parsed.data;
     switch (msg.type) {
-      case "hello":
+      case "hello": {
+        this.caps = {
+          commands: new Set((msg.commands ?? []) as CommandType[]),
+          unsupportedReason:
+            msg.readOnlyReason ??
+            (msg.printer ? "Not supported by this connection" : "Printer not set up"),
+        };
+        const info = msg.printer
+          ? {
+              ...this.state.info,
+              model: msg.printer.model,
+              name: msg.printer.name,
+              serial: msg.printer.serial,
+            }
+          : this.state.info;
+        this.setState({ ...this.state, info: { ...info, connectionMode: msg.mode ?? null } });
+        break;
+      }
+      case "printer_link":
+        if (msg.status !== this.printerLink) {
+          this.event(
+            "connection",
+            msg.status === "connected" ? "info" : "warn",
+            `Printer ${msg.status}${msg.error ? `: ${msg.error}` : ""}`,
+          );
+        }
+        this.printerLink = msg.status;
+        this.printerError = msg.error ?? null;
+        this.updateConnection(this.printerError);
+        break;
+      case "snapshot": {
+        // Accumulated server-side state (the printer only sends changes): adopt the printer data,
+        // keep this client's connection view.
+        const snap = msg.state as unknown as PrinterState;
         this.setState({
-          ...this.state,
+          ...snap,
+          source: "live",
           info: {
-            ...this.state.info,
-            model: msg.printer.model,
-            name: msg.printer.name,
-            serial: msg.printer.serial,
+            ...snap.info,
+            connectionMode: this.state.info.connectionMode,
+            serial: this.state.info.serial,
+          },
+          connection: {
+            ...this.state.connection,
+            wifiSignalDbm: snap.connection.wifiSignalDbm,
+            lastTelemetryAt: snap.connection.lastTelemetryAt,
           },
         });
-        break;
-      case "printer_link": {
-        const wasConnected = this.printerLink === "connected";
-        this.printerLink = msg.status;
-        this.event(
-          "connection",
-          msg.status === "connected" ? "info" : "warn",
-          `Printer MQTT ${msg.status}`,
-        );
-        this.updateConnection(msg.error ?? null);
-        // P1 printers send partial reports; ask once for a full snapshot after (re)connecting.
-        if (msg.status === "connected" && !wasConnected)
-          void this.sendCommand({ type: "request_full_status" });
         break;
       }
       case "report": {

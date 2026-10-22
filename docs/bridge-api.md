@@ -1,84 +1,102 @@
-# Local bridge API (contract v1)
+# Printer bridge (built into the app server)
 
-The browser cannot safely speak MQTT over TLS to the printer, and it must never hold the LAN access
-code. A small local service — the **bridge** — owns the printer connection. This document is the
-contract `LanPrinterProvider` implements. **The bridge itself is not part of this repository yet,
-and the LAN path has not been tested against a real P1S.**
+The browser never talks MQTT to the printer and never holds credentials. This app's Next.js server
+holds them, keeps one MQTT session with the printer, and relays data to any number of browser
+displays.
 
 ```text
-Browser ──WebSocket (JSON)──► Bridge ──MQTT/TLS :8883 (bblp + access code)──► P1S
+Browser display ── SSE  /api/bridge/stream  ──┐
+                 ── POST /api/bridge/command ──┤  Next.js server (src/server)
+Console setup   ── /api/bambu/*  ──────────────┤   ├─ BambuCloudClient  ── HTTPS ─► api.bambulab.com
+                                               │   └─ PrinterLink (mqtt.js)
+                                               │        ├─ cloud: mqtts://us.mqtt.bambulab.com:8883
+                                               │        └─ LAN:   mqtts://<printer-ip>:8883
+                                               └─ .data/bambu-session.json (0600, git-ignored)
 ```
 
-## Endpoint
+## Ways to connect
 
-`GET ws://<bridge-host>:<port>/v1/stream` — WebSocket upgrade. Bind to `127.0.0.1` or the LAN
-interface only. The frontend reads the URL from `NEXT_PUBLIC_BRIDGE_URL` (a public, non-secret
-value).
+| Mode                | Needs                                                    | Data                | Control                                                                                                                                                                   |
+| ------------------- | -------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Bambu Cloud**     | Bambu account (the one the printer is bound to in Handy) | Live, from anywhere | **Read-only.** Since the January 2025 Authorization Control firmware, unsigned third-party commands over the cloud are rejected. Only `pushall` status requests are sent. |
+| **LAN via account** | Signed in + printer IP                                   | Live, same network  | Pause/resume/stop/speed/temps/light — requires **LAN Only + Developer Mode** on the printer; otherwise the printer may refuse, and the UI shows the refusal               |
+| **LAN manual**      | IP, serial, access code (printer: Settings → Network)    | Live, same network  | Same as above                                                                                                                                                             |
 
-## Server → client messages
+"Bind with PIN code" in Bambu Handy is a one-time step that links a printer to an account. This
+app does not re-bind: it signs in to the account the printer is already bound to and lists it.
+
+## Setup endpoints (`/api/bambu/*`, JSON)
+
+| Method & path     | Body                                                                                                      | Result                                                                                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET status`      | —                                                                                                         | `{ cloud: {signedIn, account (masked), region}, pendingLogin, printer, link }`                                                                              |
+| `POST login`      | `{region, account, password}`                                                                             | `{step: "done" \| "verifyCode" \| "tfa"}`. On `verifyCode` the server already asked Bambu to email a code. The password is forwarded once and never stored. |
+| `POST email-code` | `{region, account}`                                                                                       | Passwordless sign-in: Bambu emails a code → `{step: "verifyCode"}`                                                                                          |
+| `POST verify`     | `{code}`                                                                                                  | Completes the pending email-code or 2FA sign-in                                                                                                             |
+| `GET devices`     | —                                                                                                         | Printers bound to the account (serial, name, online…). Access codes are never returned.                                                                     |
+| `POST connect`    | `{source:"account", serial, mode:"cloud"\|"lan", host?}` or `{source:"manual", host, serial, accessCode}` | Saves the choice and starts the MQTT link                                                                                                                   |
+| `POST disconnect` | —                                                                                                         | Stops the link, forgets the printer choice                                                                                                                  |
+| `POST logout`     | —                                                                                                         | Stops the link and deletes the saved session                                                                                                                |
+
+Bambu API calls used (community-documented, see `research.md`): `POST /v1/user-service/user/login`,
+`POST /v1/user-service/user/sendemail/code`, `POST bambulab.com/api/sign-in/tfa` (2FA),
+`GET /v1/design-user-service/my/preference` (MQTT user id), `GET /v1/iot-service/api/user/bind`.
+
+## Stream (`GET /api/bridge/stream`, Server-Sent Events)
+
+Each event's `data` is one JSON message (`src/printer/protocol/bridge-protocol.ts`, v2):
 
 ```jsonc
-// Sent once after the socket opens.
-{ "type": "hello", "protocol": 1,
-  "printer": { "model": "P1S", "name": "Workshop", "serial": "••••••••••0001" } }
+// First message, and again whenever the printer choice changes.
+{ "type": "hello", "protocol": 2,
+  "printer": { "model": "P1S", "name": "Workshop", "serial": "•••••••••••3044" } | null,
+  "mode": "cloud" | "lan" | null,
+  "commands": ["request_full_status"],
+  "readOnlyReason": "Read-only via Bambu Cloud — use LAN + Developer Mode to control" }
 
-// State of the bridge's MQTT session with the printer.
-{ "type": "printer_link", "status": "connected" | "connecting" | "disconnected",
-  "error": "optional human-readable reason" }
+{ "type": "printer_link", "status": "connected" | "connecting" | "disconnected", "error": "…" | null }
 
-// Every message received on device/{serial}/report, forwarded verbatim as JSON.
+// Sent to a newly connected browser: everything accumulated so far (P1 reports are partial).
+{ "type": "snapshot", "state": { /* PrinterState */ } }
+
+// Every message from device/{serial}/report, verbatim.
 { "type": "report", "payload": { "print": { "nozzle_temper": 212.5 } } }
+```
 
-// Outcome of a command: after the printer's reply with the same sequence_id
-// (ok = result == "success"), or after the bridge's own timeout/failure.
+A `: keepalive` comment is sent every 15 s.
+
+## Commands (`POST /api/bridge/command`)
+
+```jsonc
+// request
+{ "type": "command", "requestId": "req-7", "command": { "type": "pause" } }
+// response
 { "type": "command_result", "requestId": "req-7", "ok": true, "message": null }
 ```
 
-## Client → server messages
+The server re-checks the command against the connection mode (cloud = read-only), requires
+`confirmed: true` for `stop`, builds the payload with `buildBambuRequest`, publishes it with a fresh
+`sequence_id`, and waits up to 4 s for the printer's reply with that `sequence_id`:
+`result: "success"` → ok, anything else → `ok: false` with the printer's reason. No reply within the
+window → `ok: true, message: "Sent; no acknowledgement"`; the browser's command manager still
+requires the state change before it shows success. `pushall` is rate-limited to once per minute.
 
-```jsonc
-{ "type": "command", "requestId": "req-7", "command": { "type": "pause" } }
-```
+## Security
 
-`command` is a `PrinterCommand` (`src/printer/commands.ts`). The bridge must:
-
-1. Re-validate it (type allow-list, temperature bounds, `stop` must have `confirmed: true`).
-2. Build the payload with the shared `buildBambuRequest` (`src/printer/protocol/command-builders.ts`).
-3. Assign an incrementing `sequence_id`, publish to `device/{serial}/request` with the given QoS.
-4. Answer with `command_result` when the matching report arrives, or `ok: false` after ~5 s.
-5. Never auto-retry `stop`, `pause` or `resume`.
-6. Rate-limit `request_full_status` (P1 printers lag when `pushall` is sent too often).
-
-## Client behaviour (already implemented)
-
-- Reconnects with exponential backoff (1 s → 30 s cap); in-flight commands fail on disconnect.
-- On `printer_link: connected` it sends one `request_full_status`.
-- Validates every message with zod; unknown messages are logged and ignored.
-- Treats `command_result.ok` as an acknowledgement only; success requires the state change.
+- Routes answer only requests addressed to `localhost` and reject cross-origin requests (blocks
+  other websites and DNS rebinding). `P1S_ALLOW_LAN_CLIENTS=1` opens them to your LAN — only do
+  that on a trusted network.
+- Session file `.data/bambu-session.json` is created with mode `0600` and holds the Bambu token
+  (valid ~3 months), MQTT user id, and the chosen printer (including its LAN access code). Delete it,
+  or use Sign out, to revoke local access.
+- Serials are masked in everything sent to the browser; access codes and tokens never are sent.
+- LAN TLS is verified against Bambu's printer CA (bundled from OpenBambuAPI) with the serial as SNI;
+  cloud TLS uses the system CAs. Verification is never disabled.
 
 ## Environment variables
 
-| Variable                   | Where    | Secret    | Purpose                                |
-| -------------------------- | -------- | --------- | -------------------------------------- |
-| `NEXT_PUBLIC_PRINTER_MODE` | frontend | no        | `simulation` (default) or `lan-bridge` |
-| `NEXT_PUBLIC_BRIDGE_URL`   | frontend | no        | e.g. `ws://127.0.0.1:8787/v1/stream`   |
-| `BAMBU_PRINTER_HOST`       | bridge   | no        | printer IP                             |
-| `BAMBU_PRINTER_SERIAL`     | bridge   | sensitive | used for MQTT topics                   |
-| `BAMBU_ACCESS_CODE`        | bridge   | **yes**   | LAN access code (MQTT password)        |
-| `BRIDGE_ALLOWED_ORIGINS`   | bridge   | no        | Origin allow-list for the WebSocket    |
-
-## Security considerations
-
-- The access code lives only in the bridge's environment — never in `NEXT_PUBLIC_*`, browser
-  storage or the client bundle.
-- Check the WebSocket `Origin` header; LAN-only binding; no internet exposure.
-- The printer uses a self-signed certificate. Pin the printer's certificate (or Bambu's CA from
-  OpenBambuAPI `tls.md`) instead of disabling verification.
-- Mask the serial number before sending it to the browser.
-- Printer prerequisites: LAN-only mode and Developer Mode enabled on the printer (current firmware
-  rejects unsigned third-party control otherwise). Do not attempt to bypass Bambu's authorization.
-
-## Suggested implementation (future)
-
-Node.js + `mqtt` + `ws`, reusing `src/printer/protocol/*` and `src/printer/commands.ts` directly.
-Test it against a recorded report stream before the real printer.
+| Variable                   | Default   | Purpose                                           |
+| -------------------------- | --------- | ------------------------------------------------- |
+| `P1S_DATA_DIR`             | `./.data` | Where the session file lives                      |
+| `P1S_ALLOW_LAN_CLIENTS`    | unset     | `1` lets other devices on the network use the app |
+| `NEXT_PUBLIC_PRINTER_MODE` | unset     | `simulation` forces demo data (same as `?demo=1`) |

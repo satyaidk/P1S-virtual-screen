@@ -21,12 +21,18 @@ ESP32-S3 R16N8 (16 MB flash, 8 MB PSRAM), 2.4″ IPS touch panel, 320 × 240 lan
 
 ## Connectivity choice
 
-1. **Direct MQTT from the ESP32** (`esp-mqtt` with TLS, `bblp` + access code). No extra hardware;
-   the access code is stored in NVS (encrypt with flash encryption). Needs Developer Mode.
-   P1 reports can be large (full `pushall` ≈ several KB) — parse with a streaming/filtering
-   JSON parser and keep buffers in PSRAM.
-2. **Through the bridge** (WebSocket, `bridge-api.md`). Smaller, pre-validated messages and no
-   printer credentials on the display, at the cost of running a service.
+1. **Direct LAN MQTT from the ESP32** (`esp-mqtt` with TLS, `bblp` + access code, Bambu CA from
+   `src/server/bambu-ca.ts`, serial as SNI). No extra hardware; store the access code in NVS with
+   flash encryption. Control needs LAN Only + Developer Mode. P1 reports can be large (full
+   `pushall` is several KB), so parse with a streaming/filtering JSON parser and keep buffers in PSRAM.
+2. **Direct cloud MQTT** (`us.mqtt.bambulab.com`, `u_{uid}` + token). Works anywhere, read-only.
+   The token must be obtained once by signing in (this app's console can do it) and lasts about
+   3 months.
+3. **Through this app's server** (SSE, `bridge-api.md`). Small, pre-merged messages (`snapshot`) and
+   no credentials on the display, at the cost of keeping a computer or Raspberry Pi running.
+
+The website now runs option 2 or 1 on the server side, so the same message flow has already been
+exercised before porting.
 
 Both options keep the same state model; only the provider changes, as in the browser.
 
