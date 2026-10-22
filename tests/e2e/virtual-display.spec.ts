@@ -8,7 +8,7 @@ async function openConsole(page: Page, errors: string[] = []) {
   page.on("console", (m) => {
     if (m.type() === "error") errors.push(m.text());
   });
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await expect(display(page)).toBeVisible();
   await page.getByTestId("zoom-1").click();
   await expect(page.getByTestId("console-connection-status")).toHaveText("connected");
@@ -269,7 +269,7 @@ test("settings simulate brightness, rotation, theme and sleep", async ({ page })
 });
 
 test("display-only mode shows no development console", async ({ page }) => {
-  await page.goto("/display?scale=1");
+  await page.goto("/display?scale=1&demo=1");
   await expect(display(page)).toBeVisible();
   await expect(page.getByTestId("simulation-controls")).toHaveCount(0);
   await expect(page.getByTestId("event-log")).toHaveCount(0);

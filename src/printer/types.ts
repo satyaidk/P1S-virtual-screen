@@ -8,7 +8,11 @@
  * for a value the printer did not send.
  */
 
-export type DataSource = "simulated" | "lan-bridge";
+/** "live" = real printer data delivered by the server bridge (Bambu Cloud or LAN MQTT). */
+export type DataSource = "simulated" | "live";
+
+/** How the bridge reaches the printer. */
+export type ConnectionMode = "cloud" | "lan" | "simulation";
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
 
@@ -97,6 +101,7 @@ export interface PrinterInfo {
   serial: string | null;
   firmware: string | null;
   nozzleDiameter: string | null;
+  connectionMode: ConnectionMode | null;
 }
 
 export interface ConnectionInfo {

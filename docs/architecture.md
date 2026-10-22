@@ -18,14 +18,14 @@ rules and navigation can later be re-implemented in C/LVGL on an ESP32-S3.
 │                        ▼      ▼                                   │
 │                   PrinterProvider (interface)                     │
 │           ┌────────────────┴──────────────────┐                   │
-│ SimulatedPrinterProvider              LanPrinterProvider          │
-│   SimulationEngine (deterministic)    ConnectionManager (WS)      │
-│                                       parseReport → mergeTelemetry│
+│ SimulatedPrinterProvider            BridgePrinterProvider (live)  │
+│   (demo only, ?demo=1)              ConnectionManager + SseSocket │
+│                                     parseReport → mergeTelemetry  │
 └───────────────────────────────────────────┬──────────────────────┘
-                                            │ WebSocket (bridge-api.md)
-                                   Local bridge (not in this repo)
+                                            │ SSE + POST (bridge-api.md)
+              Next.js server (src/server): BambuCloudClient, PrinterLink, session store
                                             │ MQTT over TLS :8883
-                                       Bambu Lab P1S
+                    Bambu Cloud broker (read-only)  or  P1S on the LAN
 ```
 
 | Module                                 | Responsibility                                                                                     | Depends on React? |

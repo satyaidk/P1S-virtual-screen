@@ -91,6 +91,7 @@ const standardInfo: PrinterInfo = {
   serial: "01P00SIM0000001",
   firmware: "01.08.02.00",
   nozzleDiameter: "0.4",
+  connectionMode: "simulation",
 };
 
 const sampleJob: SimJobDefinition = {
@@ -155,7 +156,14 @@ export const SCENARIOS: readonly Scenario[] = [
     id: "sparse",
     label: "Sparse telemetry",
     description: "Firmware, serial, Wi-Fi, colours and estimates are not reported.",
-    info: { model: "P1S", name: "P1S", serial: null, firmware: null, nozzleDiameter: null },
+    info: {
+      model: "P1S",
+      name: "P1S",
+      serial: null,
+      firmware: null,
+      nozzleDiameter: null,
+      connectionMode: "simulation",
+    },
     wifiSignalDbm: null,
     ambientC: 24,
     amsUnits: [

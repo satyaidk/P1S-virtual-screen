@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import pushall from "../fixtures/p1s-pushall.json";
 import { backoffDelay, SOCKET_OPEN, type SocketLike } from "@/printer/connection-manager";
-import { LanPrinterProvider } from "@/printer/providers/LanPrinterProvider";
+import { BridgePrinterProvider } from "@/printer/providers/BridgePrinterProvider";
 import { ManualClock } from "@/printer/simulation/clock";
 import { advance, flush } from "./helpers";
 
@@ -32,16 +32,16 @@ class FakeSocket implements SocketLike {
   }
 }
 
-let provider: LanPrinterProvider | null = null;
+let provider: BridgePrinterProvider | null = null;
 
 function setup() {
   const clock = new ManualClock();
   const sockets: FakeSocket[] = [];
-  provider = new LanPrinterProvider({
-    bridgeUrl: "ws://bridge.local/v1/stream",
+  provider = new BridgePrinterProvider({
+    bridgeUrl: "/api/bridge",
     clock,
     commandTimeoutMs: 2000,
-    socketFactory: (url) => {
+    socketFactory: (url: string) => {
       const s = new FakeSocket(url);
       sockets.push(s);
       return s;
@@ -55,21 +55,34 @@ afterEach(() => {
   provider = null;
 });
 
-describe("LanPrinterProvider (fake bridge)", () => {
-  it("connects via the bridge, requests a full status and merges reports", async () => {
+const HELLO_LAN = {
+  type: "hello",
+  protocol: 2,
+  printer: { model: "P1S", name: "Shop P1S", serial: "••••1234" },
+  mode: "lan",
+  commands: ["pause", "resume", "stop", "set_speed", "request_full_status"],
+  readOnlyReason: null,
+};
+
+const HELLO_CLOUD = {
+  ...HELLO_LAN,
+  mode: "cloud",
+  commands: ["request_full_status"],
+  readOnlyReason: "Read-only over Bambu Cloud",
+};
+
+describe("BridgePrinterProvider (fake bridge)", () => {
+  it("connects via the bridge and merges partial reports", async () => {
     const { sockets, provider } = setup();
     await provider.connect();
     expect(provider.getState().connection.status).toBe("connecting");
     const s = sockets[0]!;
     s.open();
-    s.receive({
-      type: "hello",
-      protocol: 1,
-      printer: { model: "P1S", name: "Shop P1S", serial: "****1234" },
-    });
+    s.receive(HELLO_LAN);
     s.receive({ type: "printer_link", status: "connected" });
     expect(provider.getState().connection.status).toBe("connected");
-    expect(s.sent[0]).toMatchObject({ type: "command", command: { type: "request_full_status" } });
+    expect(provider.getState().info.connectionMode).toBe("lan");
+    expect(provider.capabilities.commands.has("pause")).toBe(true);
 
     s.receive({ type: "report", payload: pushall });
     s.receive({ type: "report", payload: { print: { nozzle_temper: 150 } } });
@@ -85,6 +98,7 @@ describe("LanPrinterProvider (fake bridge)", () => {
     await provider.connect();
     const s = sockets[0]!;
     s.open();
+    s.receive(HELLO_LAN);
     s.receive({ type: "printer_link", status: "connected" });
 
     const p = provider.sendCommand({ type: "pause" });
@@ -102,10 +116,49 @@ describe("LanPrinterProvider (fake bridge)", () => {
     expect(await provider.sendCommand({ type: "start_sample_job" })).toMatchObject({ ok: false });
   });
 
+  it("is read-only over the cloud and explains why", async () => {
+    const { sockets, provider } = setup();
+    await provider.connect();
+    sockets[0]!.open();
+    sockets[0]!.receive(HELLO_CLOUD);
+    expect(provider.getState().info.connectionMode).toBe("cloud");
+    expect(provider.capabilities.unsupportedReason).toBe("Read-only over Bambu Cloud");
+    expect(await provider.sendCommand({ type: "pause" })).toEqual({
+      ok: false,
+      message: "Read-only over Bambu Cloud",
+    });
+    expect(sockets[0]!.sent).toHaveLength(0);
+  });
+
+  it("adopts the server snapshot so a late client sees the full state", async () => {
+    const { sockets, provider } = setup();
+    await provider.connect();
+    sockets[0]!.open();
+    sockets[0]!.receive(HELLO_LAN);
+    sockets[0]!.receive({ type: "printer_link", status: "connected" });
+    const { createUnknownState } = await import("@/printer/state");
+    const snap = createUnknownState("live", "Shop P1S");
+    sockets[0]!.receive({
+      type: "snapshot",
+      state: {
+        ...snap,
+        status: "printing",
+        nozzle: { current: 219, target: 220 },
+        connection: { ...snap.connection, status: "disconnected", lastTelemetryAt: 5 },
+      },
+    });
+    const st = provider.getState();
+    expect(st.status).toBe("printing");
+    expect(st.nozzle.current).toBe(219);
+    expect(st.connection.status).toBe("connected"); // client view of the link is kept
+    expect(st.connection.lastTelemetryAt).toBe(5);
+    expect(st.info.connectionMode).toBe("lan");
+  });
+
   it("ignores invalid bridge messages", async () => {
     const { sockets, provider } = setup();
     const events: string[] = [];
-    provider.onEvent((e) => events.push(e.message));
+    provider.onEvent((e: { message: string }) => events.push(e.message));
     await provider.connect();
     sockets[0]!.open();
     sockets[0]!.receive({ type: "mystery" });
@@ -118,6 +171,7 @@ describe("LanPrinterProvider (fake bridge)", () => {
     const { clock, sockets, provider } = setup();
     await provider.connect();
     sockets[0]!.open();
+    sockets[0]!.receive(HELLO_LAN);
     sockets[0]!.receive({ type: "printer_link", status: "connected" });
     const inFlight = provider.sendCommand({ type: "pause" });
     sockets[0]!.drop();

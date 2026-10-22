@@ -57,6 +57,32 @@ in-use marker, destructive actions behind a modal with the safe option first.
 - **Camera (P1S):** JPEG frames over TLS on port 6000 with an auth packet — a browser cannot open
   this socket; it needs the bridge.
 
+## Bambu Cloud (added for the live connection)
+
+Sources: OpenBambuAPI `cloud-http.md`, ha-bambulab `bambu_cloud.py` / `bambu_client.py`. Login error
+shapes were checked against the live API with an invalid account (`{"code":1,"error":"Incorrect
+account or password."}`, `{"code":4,"error":"Please login."}`).
+
+- `POST https://api.bambulab.com/v1/user-service/user/login` with `{account, password}` returns
+  `accessToken` (≈3 months) or `loginType: "verifyCode"` (email code needed) or `loginType: "tfa"`
+  with `tfaKey`. With `{account, code}` it logs in with an emailed code.
+- `POST /v1/user-service/user/sendemail/code` `{email, type: "codeLogin"}` sends that code.
+- 2FA: `POST https://bambulab.com/api/sign-in/tfa` `{tfaKey, tfaCode}` with the `bbl_csrf_token`
+  cookie from `GET https://bambulab.com/api/csrf`; the token comes back as a `token` cookie.
+- MQTT username is `u_{uid}`: from the JWT payload `username`, else `GET
+/v1/design-user-service/my/preference` → `uid`. Password = access token.
+- Broker: `us.mqtt.bambulab.com:8883` (China: `cn.mqtt.bambulab.com`; API host `api.bambulab.cn`).
+- `GET /v1/iot-service/api/user/bind` lists bound printers: `dev_id` (serial), `name`, `online`,
+  `print_status`, `dev_model_name` (P1S = `C12`), `dev_product_name`, `dev_access_code`.
+- The API is behind Cloudflare; ha-bambulab falls back to browser-impersonating clients when
+  blocked. This app does not impersonate; it reports the block instead.
+- **Bind with PIN code:** no public or community documentation exists for the PIN-binding call
+  (only an unlabeled path list from an APK memory dump). It is also unnecessary for a printer that
+  already appears in Handy, so it is not implemented.
+- **Cloud control:** subscribing to `device/{serial}/report` and sending `pushall`/`get_version` work
+  with an account token; control commands require Bambu's signed-command scheme on current
+  firmware (the user's P1S runs 01.10.00.00), so cloud mode is read-only here.
+
 ## Authentication and firmware
 
 - Since the January 2025 "Authorization Control" firmware, cloud-connected printers reject
@@ -69,8 +95,8 @@ in-use marker, destructive actions behind a modal with the safe option first.
 
 ## Decisions taken from the research
 
-1. The browser never speaks MQTT/TLS to the printer and never holds the access code → a local
-   bridge owns that (see `bridge-api.md`).
+1. The browser never speaks MQTT/TLS to the printer and never holds tokens or access codes → this
+   app's own server owns the MQTT session (see `bridge-api.md`).
 2. Telemetry is merged, never replaced, because P1 reports are partial.
 3. A transport ack is not success: commands are confirmed by observing the state change.
 4. Only commands with verified payloads are exposed in LAN mode (see

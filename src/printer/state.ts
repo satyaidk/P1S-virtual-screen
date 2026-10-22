@@ -29,7 +29,14 @@ export function speedPreset(level: SpeedLevel | null): SpeedPreset | null {
 export function createUnknownState(source: DataSource, name = "P1S"): PrinterState {
   return {
     source,
-    info: { model: "P1S", name, serial: null, firmware: null, nozzleDiameter: null },
+    info: {
+      model: "P1S",
+      name,
+      serial: null,
+      firmware: null,
+      nozzleDiameter: null,
+      connectionMode: null,
+    },
     connection: {
       status: "disconnected",
       wifiSignalDbm: null,

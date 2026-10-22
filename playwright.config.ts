@@ -21,6 +21,8 @@ export default defineConfig({
   ],
   webServer: {
     command: `npx next start -p ${PORT}`,
+    // Keep e2e runs away from a real saved Bambu session.
+    env: { P1S_DATA_DIR: "test-results/e2e-data" },
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

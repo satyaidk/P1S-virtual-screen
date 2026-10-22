@@ -17,12 +17,12 @@ export function InfoScreen({ now }: { now: number }) {
   const rows: [string, string][] = [
     ["Model", info.model],
     ["Name", info.name],
-    ["Data source", state.source === "simulated" ? "SIMULATED" : "LAN bridge"],
+    ["Data source", dataSourceLabel(state.source, info.connectionMode)],
     ["Firmware", info.firmware ?? "Not reported"],
     ["Serial", maskSerial(info.serial)],
     ["Nozzle", info.nozzleDiameter ? `${info.nozzleDiameter} mm` : "Not reported"],
     ["Status", status.label],
-    ["Connection", connection.status],
+    ["Control", runtime.provider.capabilities.commands.has("pause") ? "Enabled" : "Read-only"],
     [
       "Wi-Fi",
       connection.wifiSignalDbm === null ? "Not reported" : `${connection.wifiSignalDbm} dBm`,
@@ -57,4 +57,11 @@ export function InfoScreen({ now }: { now: number }) {
       </dl>
     </div>
   );
+}
+
+function dataSourceLabel(source: string, mode: string | null): string {
+  if (source === "simulated") return "SIMULATED";
+  if (mode === "cloud") return "Live · Bambu Cloud";
+  if (mode === "lan") return "Live · LAN";
+  return "Not set up";
 }

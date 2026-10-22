@@ -6,11 +6,14 @@ import { defaultProviderConfig, type ProviderConfig } from "@/printer/providers/
 import { ConnectionPanel } from "./ConnectionPanel";
 import { DisplayStage } from "./DisplayStage";
 import { EventLog } from "./EventLog";
+import { PrinterSetup } from "./PrinterSetup";
 import { SimulationControls } from "./SimulationControls";
 import { StateInspector } from "./StateInspector";
 
-export function DevelopmentConsole() {
-  const [config, setConfig] = useState<ProviderConfig>(() => defaultProviderConfig());
+/** `demo` switches to the built-in simulator (development only; `/?demo=1`). */
+export function DevelopmentConsole({ demo = false }: { demo?: boolean }) {
+  const [config] = useState<ProviderConfig>(() => defaultProviderConfig(demo));
+  const simulated = config.mode === "simulation";
 
   return (
     <div className="min-h-screen bg-ink-950 text-fg">
@@ -18,7 +21,23 @@ export function DevelopmentConsole() {
         <h1 className="text-sm font-semibold">P1S Virtual Screen</h1>
         <span className="text-xs text-fg-dim">Development console</span>
         <span className="flex-1" />
-        <a href="/display" className="text-xs text-info hover:underline" data-testid="open-display">
+        {simulated && (
+          <span className="rounded bg-info-soft px-1.5 py-0.5 text-2xs font-bold text-info">
+            DEMO DATA
+          </span>
+        )}
+        <a
+          href={simulated ? "/" : "/?demo=1"}
+          className="text-xs text-fg-dim hover:text-fg"
+          data-testid="toggle-demo"
+        >
+          {simulated ? "Use my printer" : "Demo mode"}
+        </a>
+        <a
+          href={simulated ? "/display?demo=1" : "/display"}
+          className="text-xs text-info hover:underline"
+          data-testid="open-display"
+        >
           Open display only →
         </a>
       </header>
@@ -31,10 +50,17 @@ export function DevelopmentConsole() {
             <div className="flex justify-center overflow-auto rounded-lg border border-ink-700 bg-ink-900 p-6">
               <DisplayStage />
             </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <SimulationControls />
-              <ConnectionPanel config={config} onChange={setConfig} />
-            </div>
+            {simulated ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <SimulationControls />
+                <ConnectionPanel />
+              </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+                <PrinterSetup />
+                <ConnectionPanel />
+              </div>
+            )}
           </div>
           <div className="grid content-start gap-4">
             <EventLog />

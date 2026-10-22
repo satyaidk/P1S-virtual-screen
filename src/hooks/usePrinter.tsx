@@ -87,6 +87,7 @@ export function useCommandValidation(command: PrinterCommand, now: number): Vali
   const state = usePrinter((s) => s.state);
   return validateCommand(command, state, {
     supported: runtime.provider.capabilities.commands,
+    unsupportedReason: runtime.provider.capabilities.unsupportedReason,
     now,
     staleAfterMs: runtime.staleAfterMs,
   });

@@ -29,9 +29,9 @@ function useScale(): number {
   return scale;
 }
 
-export function KioskDisplay() {
+export function KioskDisplay({ demo = false }: { demo?: boolean }) {
   const scale = useScale();
-  const [config] = useState(defaultProviderConfig);
+  const [config] = useState(() => defaultProviderConfig(demo));
   return (
     <div className="flex min-h-screen items-center justify-center bg-black">
       <PrinterRuntimeProvider config={config}>

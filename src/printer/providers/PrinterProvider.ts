@@ -6,6 +6,8 @@ import type { SimulationControls } from "./SimulatedPrinterProvider";
 export interface ProviderCapabilities {
   /** Commands this provider can deliver. The UI disables everything else. */
   commands: ReadonlySet<CommandType>;
+  /** Shown instead of a generic message when a command is unavailable (e.g. read-only cloud). */
+  unsupportedReason?: string | null;
 }
 
 export interface ProviderEvent {
