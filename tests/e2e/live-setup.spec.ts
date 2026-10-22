@@ -12,9 +12,15 @@ test("defaults to the real printer and explains that setup is needed", async ({ 
   await expect(page.getByTestId("printer-setup")).toBeVisible();
   await expect(page.getByTestId("simulation-controls")).toHaveCount(0);
   await expect(display.getByText("SIM", { exact: true })).toHaveCount(0);
-  await expect(display.getByTestId("offline-panel")).toContainText("Not set up yet");
+  await expect(display.getByTestId("offline-panel")).toContainText("Not connected yet");
   await expect(page.getByTestId("current-connection")).toContainText("No printer connected yet");
-  await expect(page.getByTestId("sign-in")).toBeVisible();
+  // The serial is built in and the IP is discovered: only the access code is asked for.
+  const card = page.getByTestId("my-printer");
+  await expect(card).toContainText("SN •••••••••••3044");
+  await expect(page.getByTestId("discovery-status")).toBeVisible();
+  await expect(page.getByTestId("access-code")).toBeVisible();
+  await expect(page.getByTestId("connect-access-code")).toBeDisabled();
+  await expect(page.getByTestId("sign-in")).toHaveCount(0); // cloud sign-in is optional, collapsed
 });
 
 test("display controls are disabled until a printer is connected", async ({ page }) => {
@@ -46,6 +52,21 @@ test("setup routes validate input and reject cross-origin requests", async ({
     data: {},
   });
   expect(foreign.status()).toBe(403);
+
+  const shortCode = await request.post("/api/bambu/connect", {
+    data: { source: "access-code", accessCode: "12" },
+  });
+  expect(shortCode.status()).toBe(400);
+  expect((await shortCode.json()).error).toMatch(/Access Code|8 characters/);
+
+  const status2 = await request.get("/api/bambu/status");
+  expect((await status2.json()).myPrinter).toMatchObject({
+    maskedSerial: "•••••••••••3044",
+    model: "P1S",
+  });
+  expect(JSON.stringify(await (await request.get("/api/bambu/status")).json())).not.toContain(
+    "01P00C662003044",
+  );
 
   const badLan = await request.post("/api/bambu/connect", {
     headers: { origin: baseURL! },

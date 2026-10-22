@@ -20,7 +20,15 @@ export interface CloudSession {
 
 export type PrinterTarget =
   | { mode: "cloud"; serial: string; name: string }
-  | { mode: "lan"; serial: string; name: string; host: string; accessCode: string };
+  | {
+      mode: "lan";
+      serial: string;
+      name: string;
+      host: string;
+      accessCode: string;
+      /** "auto" = found by network discovery and followed if the printer's IP changes. */
+      hostSource?: "auto" | "manual";
+    };
 
 export interface StoredState {
   cloud: CloudSession | null;

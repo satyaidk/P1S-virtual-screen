@@ -70,7 +70,7 @@ export class PrinterLink {
   private client: MqttClientLike | null = null;
   private config: LinkConfig | null = null;
   private status: LinkStatus = "disconnected";
-  private error: string | null = "Not set up yet — sign in on the console to choose a printer";
+  private error: string | null = "Not connected yet — enter the access code on the console";
   private state: PrinterState = createUnknownState("live");
   private listeners = new Set<Listener>();
   private seq = Math.floor(Math.random() * 10_000);

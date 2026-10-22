@@ -14,29 +14,41 @@ Console setup   ── /api/bambu/*  ──────────────�
                                                └─ .data/bambu-session.json (0600, git-ignored)
 ```
 
+## Default: access code only
+
+The printer's serial is built in (`src/server/printer-config.ts`, overridable with
+`BAMBU_PRINTER_SERIAL`). Its IP comes from **network discovery** (`src/server/discovery.ts`): the
+server listens on UDP 1990 (multicast `239.255.255.250`) and 2021 (broadcast) for the printer's
+SSDP-style `NOTIFY` (`NT: urn:bambulab-com:device:3dprinter:1`, `USN: <serial>`,
+`Location: <ip>`), and sends an `M-SEARCH` probe at start-up. The user only types the LAN access
+code. The saved connection is marked `hostSource: "auto"`; when the printer is later announced at a
+different IP (DHCP), the link is restarted at the new address. `BAMBU_PRINTER_HOST` or a typed IP
+skips discovery.
+
 ## Ways to connect
 
-| Mode                | Needs                                                    | Data                | Control                                                                                                                                                                   |
-| ------------------- | -------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Bambu Cloud**     | Bambu account (the one the printer is bound to in Handy) | Live, from anywhere | **Read-only.** Since the January 2025 Authorization Control firmware, unsigned third-party commands over the cloud are rejected. Only `pushall` status requests are sent. |
-| **LAN via account** | Signed in + printer IP                                   | Live, same network  | Pause/resume/stop/speed/temps/light — requires **LAN Only + Developer Mode** on the printer; otherwise the printer may refuse, and the UI shows the refusal               |
-| **LAN manual**      | IP, serial, access code (printer: Settings → Network)    | Live, same network  | Same as above                                                                                                                                                             |
+| Mode                                | Needs                                                    | Data                | Control                                                                                                                                                                   |
+| ----------------------------------- | -------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Bambu Cloud**                     | Bambu account (the one the printer is bound to in Handy) | Live, from anywhere | **Read-only.** Since the January 2025 Authorization Control firmware, unsigned third-party commands over the cloud are rejected. Only `pushall` status requests are sent. |
+| **LAN via account**                 | Signed in + printer IP                                   | Live, same network  | Pause/resume/stop/speed/temps/light — requires **LAN Only + Developer Mode** on the printer; otherwise the printer may refuse, and the UI shows the refusal               |
+| **LAN, access code only** (default) | Access code; serial built in, IP discovered              | Live, same network  | Same as LAN via account                                                                                                                                                   |
+| **LAN manual**                      | IP, serial, access code (printer: Settings → Network)    | Live, same network  | Same as above                                                                                                                                                             |
 
 "Bind with PIN code" in Bambu Handy is a one-time step that links a printer to an account. This
 app does not re-bind: it signs in to the account the printer is already bound to and lists it.
 
 ## Setup endpoints (`/api/bambu/*`, JSON)
 
-| Method & path     | Body                                                                                                      | Result                                                                                                                                                      |
-| ----------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET status`      | —                                                                                                         | `{ cloud: {signedIn, account (masked), region}, pendingLogin, printer, link }`                                                                              |
-| `POST login`      | `{region, account, password}`                                                                             | `{step: "done" \| "verifyCode" \| "tfa"}`. On `verifyCode` the server already asked Bambu to email a code. The password is forwarded once and never stored. |
-| `POST email-code` | `{region, account}`                                                                                       | Passwordless sign-in: Bambu emails a code → `{step: "verifyCode"}`                                                                                          |
-| `POST verify`     | `{code}`                                                                                                  | Completes the pending email-code or 2FA sign-in                                                                                                             |
-| `GET devices`     | —                                                                                                         | Printers bound to the account (serial, name, online…). Access codes are never returned.                                                                     |
-| `POST connect`    | `{source:"account", serial, mode:"cloud"\|"lan", host?}` or `{source:"manual", host, serial, accessCode}` | Saves the choice and starts the MQTT link                                                                                                                   |
-| `POST disconnect` | —                                                                                                         | Stops the link, forgets the printer choice                                                                                                                  |
-| `POST logout`     | —                                                                                                         | Stops the link and deletes the saved session                                                                                                                |
+| Method & path     | Body                                                                                                                                                             | Result                                                                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET status`      | —                                                                                                                                                                | `{ myPrinter: {name, maskedSerial, host, hostSource, lastSeen, discoveryProblems}, cloud: {signedIn, account (masked), region}, pendingLogin, printer, link }` |
+| `POST login`      | `{region, account, password}`                                                                                                                                    | `{step: "done" \| "verifyCode" \| "tfa"}`. On `verifyCode` the server already asked Bambu to email a code. The password is forwarded once and never stored.    |
+| `POST email-code` | `{region, account}`                                                                                                                                              | Passwordless sign-in: Bambu emails a code → `{step: "verifyCode"}`                                                                                             |
+| `POST verify`     | `{code}`                                                                                                                                                         | Completes the pending email-code or 2FA sign-in                                                                                                                |
+| `GET devices`     | —                                                                                                                                                                | Printers bound to the account (serial, name, online…). Access codes are never returned.                                                                        |
+| `POST connect`    | `{source:"access-code", accessCode, host?}` (default), `{source:"account", serial, mode:"cloud"\|"lan", host?}` or `{source:"manual", host, serial, accessCode}` | Saves the choice and starts the MQTT link. `access-code` waits up to 15 s for discovery; 404 if the printer is not found.                                      |
+| `POST disconnect` | —                                                                                                                                                                | Stops the link, forgets the printer choice                                                                                                                     |
+| `POST logout`     | —                                                                                                                                                                | Stops the link and deletes the saved session                                                                                                                   |
 
 Bambu API calls used (community-documented, see `research.md`): `POST /v1/user-service/user/login`,
 `POST /v1/user-service/user/sendemail/code`, `POST bambulab.com/api/sign-in/tfa` (2FA),

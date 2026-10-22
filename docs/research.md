@@ -83,6 +83,30 @@ account or password."}`, `{"code":4,"error":"Please login."}`).
   with an account token; control commands require Bambu's signed-command scheme on current
   firmware (the user's P1S runs 01.10.00.00), so cloud mode is read-only here.
 
+## LAN discovery (added for "access code only")
+
+Sources: Bambu Lab wiki port table (device discovery on UDP 1990/2021, SSDP multicast/broadcast, cloud
+and LAN mode), Bambu forum thread "Use SSDP Standards" (example announcement), community
+`bambu-ssdp-discovery.py` gist (Bambu Studio listens on 2021/udp).
+
+Example announcement (X1C, from the forum; field set assumed identical on P1S):
+
+```text
+Host: 239.255.255.250:1990
+Location: 192.168.1.64
+NT: urn:bambulab-com:device:3dprinter:1
+NTS: ssdp:alive
+USN: <serial>
+DevModel.bambu.com: 3DPrinter-X1-Carbon
+DevName.bambu.com: MrSlinky
+DevSignal.bambu.com: -30
+DevConnect.bambu.com: cloud
+DevBind.bambu.com: occupied
+```
+
+Unverified: whether a P1S answers `M-SEARCH` (the app does not rely on it; periodic announcements
+are enough) and the exact `DevModel` string for P1S (`C12` per the cloud API's `dev_model_name`).
+
 ## Authentication and firmware
 
 - Since the January 2025 "Authorization Control" firmware, cloud-connected printers reject

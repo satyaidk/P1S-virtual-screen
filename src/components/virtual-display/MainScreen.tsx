@@ -130,7 +130,7 @@ function OfflinePanel({
       <p className="text-sm font-bold">
         {connecting
           ? "Connecting to printer…"
-          : lastError?.startsWith("Not set up")
+          : lastError?.startsWith("Not connected yet")
             ? "No printer connected"
             : "Printer offline"}
       </p>
