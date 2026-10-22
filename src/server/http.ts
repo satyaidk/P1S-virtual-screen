@@ -10,6 +10,17 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
  * websites and DNS-rebinding). Set P1S_ALLOW_LAN_CLIENTS=1 to use the console from another device.
  */
 export function rejectForeignRequest(req: Request): Response | null {
+  if (process.env.VERCEL) {
+    // Serverless functions cannot hold the printer's MQTT connection or store the session, and a
+    // public URL must not expose printer control. The live connection is a local-server feature.
+    return json(
+      {
+        error:
+          "Live printer connection needs this app running on your own computer (npm run dev). Hosted deployments only support demo mode (/?demo=1).",
+      },
+      403,
+    );
+  }
   const url = new URL(req.url);
   const host = req.headers.get("host") ?? url.host;
   const hostname = host.replace(/:\d+$/, "");
