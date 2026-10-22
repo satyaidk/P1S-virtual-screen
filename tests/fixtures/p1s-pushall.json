@@ -1,0 +1,82 @@
+{
+  "print": {
+    "ams": {
+      "ams": [
+        {
+          "humidity": "4",
+          "id": "0",
+          "temp": "22.7",
+          "tray": [
+            { "id": "0" },
+            {
+              "bed_temp": "0",
+              "cols": ["000000FF"],
+              "id": "1",
+              "nozzle_temp_max": "240",
+              "nozzle_temp_min": "190",
+              "remain": 0,
+              "tray_color": "000000FF",
+              "tray_info_idx": "GFA00",
+              "tray_type": "PLA"
+            },
+            {
+              "id": "2",
+              "nozzle_temp_max": "240",
+              "nozzle_temp_min": "190",
+              "remain": 63,
+              "tray_color": "DFE2E3FF",
+              "tray_info_idx": "GFA05",
+              "tray_type": "PLA"
+            },
+            {
+              "id": "3",
+              "nozzle_temp_max": "240",
+              "nozzle_temp_min": "190",
+              "remain": -1,
+              "tray_color": "F95959FF",
+              "tray_info_idx": "GFL00",
+              "tray_type": "PLA"
+            }
+          ]
+        }
+      ],
+      "ams_exist_bits": "1",
+      "tray_exist_bits": "e",
+      "tray_now": "255",
+      "version": 4
+    },
+    "bed_target_temper": 25.0,
+    "bed_temper": 25.0,
+    "chamber_temper": 24.0,
+    "command": "push_status",
+    "gcode_file": "",
+    "gcode_start_time": "0",
+    "gcode_state": "IDLE",
+    "hms": [],
+    "layer_num": 0,
+    "lights_report": [
+      { "mode": "on", "node": "chamber_light" },
+      { "mode": "flashing", "node": "work_light" }
+    ],
+    "mc_percent": 0,
+    "mc_remaining_time": 0,
+    "nozzle_diameter": "0.4",
+    "nozzle_target_temper": 25.0,
+    "nozzle_temper": 25.0,
+    "print_error": 0,
+    "sequence_id": "2021",
+    "spd_lvl": 2,
+    "spd_mag": 100,
+    "stg_cur": -1,
+    "subtask_name": "",
+    "total_layer_num": 0,
+    "vt_tray": {
+      "id": "254",
+      "remain": 0,
+      "tray_color": "00000000",
+      "tray_info_idx": "",
+      "tray_type": ""
+    },
+    "wifi_signal": "-45dBm"
+  }
+}
