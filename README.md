@@ -40,6 +40,11 @@ See [docs/bridge-api.md](docs/bridge-api.md).
 | `/display`                    | Display only (kiosk). Integer scale that fits the window, or `?scale=1`                                      |
 | `/?demo=1`, `/display?demo=1` | Development only: simulated printer with fault injection                                                     |
 
+**Run it locally for your printer.** The live connection keeps an MQTT session open and stores your
+Bambu session on disk, which serverless hosting (e.g. the Vercel preview deployments of this repo)
+cannot do, and a public URL must not expose printer control. Hosted deployments therefore only
+serve demo mode (`/?demo=1`); the setup routes answer with an explanation.
+
 ## What's inside
 
 - **Screens:** home (job, progress, ETA, temperatures, active filament), temperature control,
