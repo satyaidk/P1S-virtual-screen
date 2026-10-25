@@ -1,18 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { fieldClass as input } from "@/components/ui/field";
 import { Panel } from "@/components/ui/Panel";
 import { usePrinter, useRuntime } from "@/hooks/usePrinter";
 import { cn } from "@/lib/cn";
 import { bambuApi, type AccountPrinter, type SetupStatus } from "./bambu-api";
 
-const input =
-  "h-8 min-w-0 rounded-md border border-ink-600 bg-ink-850 px-2 text-xs text-fg placeholder:text-fg-dim";
-
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="flex flex-col gap-1 text-2xs text-fg-muted">
+    <label className="flex flex-col gap-1.5 text-[13px] text-fg-muted">
       {label}
       {children}
     </label>
@@ -80,8 +79,12 @@ export function PrinterSetup() {
   };
 
   return (
-    <Panel title="Printer connection" testId="printer-setup">
-      <div className="flex flex-col gap-4 text-xs">
+    <Panel
+      title="Connect your printer"
+      description="Live data from your P1S drives the display."
+      testId="printer-setup"
+    >
+      <div className="flex flex-col gap-3 text-[13px]">
         <CurrentConnection
           status={status}
           busy={busy}
@@ -92,14 +95,14 @@ export function PrinterSetup() {
         {error && (
           <p
             role="alert"
-            className="rounded-md border border-danger/60 bg-danger-soft px-2 py-1.5 text-fg"
+            className="rounded-md border border-danger/60 bg-danger-soft px-3 py-2 text-fg"
             data-testid="setup-error"
           >
             {error}
           </p>
         )}
         {status?.hosted ? (
-          <div className="rounded-md border border-ink-600 p-3" data-testid="hosted-sign-in">
+          <div className="rounded-md border border-line bg-bench p-3" data-testid="hosted-sign-in">
             {!signedIn && <SignIn status={status} busy={busy} run={run} />}
             {signedIn && (
               <AccountPrinters
@@ -153,14 +156,11 @@ function HostedNotice({ setupError }: { setupError: string | null }) {
   return (
     <div className="flex flex-col gap-2" data-testid="hosted-notice">
       {setupError && (
-        <p
-          role="alert"
-          className="rounded-md border border-warn/60 bg-warn-soft px-2 py-1.5 text-fg"
-        >
+        <p role="alert" className="rounded-md border border-warn/60 bg-warn-soft px-3 py-2 text-fg">
           {setupError}
         </p>
       )}
-      <p className="text-2xs leading-4 text-fg-muted">
+      <p className="leading-5 text-fg-muted">
         <strong className="text-fg">Online version.</strong> Sign in with the Bambu account your
         printer is bound to and the display shows it live through Bambu Cloud, from anywhere. It is{" "}
         <strong className="text-fg">view-only</strong>: Bambu blocks control over the cloud, and the
@@ -182,16 +182,21 @@ function Collapsible({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-md border border-ink-700">
+    <div className="rounded-md border border-line">
       <button
         type="button"
-        className="w-full px-2.5 py-2 text-left text-2xs font-semibold text-fg-muted hover:text-fg"
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left font-medium text-fg-muted hover:text-fg focus-visible:outline-2 focus-visible:outline-mat-ink"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        {open ? "▾" : "▸"} {title}
+        <ChevronRight
+          size={16}
+          aria-hidden
+          className={cn("shrink-0 transition-transform", open && "rotate-90")}
+        />
+        {title}
       </button>
-      {open && <div className="px-2.5 pb-2.5">{children}</div>}
+      {open && <div className="px-3 pb-3">{children}</div>}
     </div>
   );
 }
@@ -238,31 +243,28 @@ function MyPrinterCard({
   return (
     <form
       onSubmit={submit}
-      className="flex flex-col gap-2.5 rounded-md border border-ink-600 p-3"
+      className="flex flex-col gap-3 rounded-md border border-line bg-bench p-3"
       data-testid="my-printer"
     >
       <div>
-        <div className="text-sm font-semibold">{mine.name}</div>
-        <div className="text-2xs text-fg-dim">
+        <div className="text-[14px] font-semibold">{mine.name}</div>
+        <div className="text-[12px] text-fg-muted">
           {mine.model} · SN {mine.maskedSerial} (built in)
         </div>
       </div>
-      <div
-        className="flex items-center gap-2 text-2xs text-fg-muted"
-        data-testid="discovery-status"
-      >
+      <div className="flex items-center gap-2 text-fg-muted" data-testid="discovery-status">
         <span className={cn("size-2 shrink-0 rounded-full", network.tone)} aria-hidden />
         {network.text}
       </div>
       {mine.discoveryProblems.length > 0 && mine.hostSource === null && (
-        <p className="text-2xs text-warn">
+        <p className="text-warn">
           Network discovery is blocked ({mine.discoveryProblems.join("; ")}). Enter the IP below.
         </p>
       )}
       <Field label="Access code">
         <div className="flex gap-2">
           <input
-            className={cn(input, "w-40 font-mono tracking-widest")}
+            className={cn(input, "w-full flex-1 font-mono tracking-widest")}
             autoComplete="off"
             spellCheck={false}
             placeholder="e.g. 12345678"
@@ -286,16 +288,16 @@ function MyPrinterCard({
           </Button>
         </div>
       </Field>
-      <p className="text-2xs leading-4 text-fg-dim">
+      <p className="text-[12px] leading-5 text-fg-muted">
         On the printer:{" "}
-        <strong className="text-fg-muted">Settings → Network (WLAN) → Access Code</strong> (8
+        <strong className="font-medium text-fg">Settings → Network (WLAN) → Access Code</strong> (8
         characters). This is the LAN code, not the 6-digit PIN from “Bind with PIN code”. Controls
-        need <strong className="text-fg-muted">LAN Only + Developer Mode</strong> enabled on the
-        printer; otherwise you still get live data.
+        need <strong className="font-medium text-fg">LAN Only + Developer Mode</strong> enabled on
+        the printer; otherwise you still get live data.
       </p>
       <button
         type="button"
-        className="self-start text-2xs text-info hover:underline"
+        className="self-start text-info hover:underline focus-visible:outline-2 focus-visible:outline-mat-ink"
         onClick={() => setShowHost(!showHost)}
       >
         {showHost ? "Use automatic discovery" : "Printer not found? Enter its IP"}
@@ -303,7 +305,7 @@ function MyPrinterCard({
       {showHost && (
         <Field label="Printer IP (printer screen → Settings → Network)">
           <input
-            className={cn(input, "w-48")}
+            className={cn(input, "w-full")}
             placeholder="192.168.1.50"
             value={host}
             onChange={(e) => setHost(e.target.value.trim())}
@@ -337,7 +339,7 @@ function CurrentConnection({
         : "text-danger";
   return (
     <div
-      className="rounded-md border border-ink-700 bg-ink-850 p-2.5"
+      className="rounded-md border border-line bg-bench px-3 py-2.5"
       data-testid="current-connection"
     >
       {status?.printer ? (
@@ -347,7 +349,7 @@ function CurrentConnection({
               {status.printer.name}{" "}
               <span className="font-normal text-fg-dim">{status.printer.maskedSerial}</span>
             </div>
-            <div className="text-2xs text-fg-muted">
+            <div className="text-[12px] text-fg-muted">
               via{" "}
               {status.printer.mode === "cloud"
                 ? "Bambu Cloud (read-only)"
@@ -364,7 +366,10 @@ function CurrentConnection({
           </Button>
         </div>
       ) : (
-        <p className="text-fg-muted">No printer connected yet.</p>
+        <p className="flex items-center gap-2 text-fg-muted">
+          <span aria-hidden className="size-2 rounded-full bg-fg-dim" />
+          No printer connected yet.
+        </p>
       )}
     </div>
   );
@@ -418,10 +423,8 @@ function SignIn({ status, busy, run }: { status: SetupStatus; busy: string | nul
 
   return (
     <form className="flex flex-col gap-2" onSubmit={submitPassword} data-testid="sign-in">
-      <h3 className="text-2xs font-semibold tracking-wide text-fg-muted uppercase">
-        1 · Sign in to Bambu Lab
-      </h3>
-      <div className="grid grid-cols-[110px_1fr] gap-2">
+      <h3 className="font-semibold text-fg">Sign in to Bambu Lab</h3>
+      <div className="grid grid-cols-[100px_1fr] gap-2">
         <Field label="Region">
           <select
             className={input}
@@ -465,7 +468,7 @@ function SignIn({ status, busy, run }: { status: SetupStatus; busy: string | nul
           {busy === "code" ? "Sending…" : "Email me a code"}
         </Button>
       </div>
-      <p className="text-2xs text-fg-dim">
+      <p className="text-[12px] leading-5 text-fg-muted">
         {status.hosted
           ? "Your password is sent once to Bambu Lab and never stored. The sign-in is kept only in an encrypted cookie in this browser."
           : "Your password is sent once to Bambu Lab by this app's local server and is never stored."}
@@ -491,8 +494,9 @@ function AccountPrinters({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <h3 className="flex-1 text-2xs font-semibold tracking-wide text-fg-muted uppercase">
-          2 · Choose your printer <span className="normal-case">({status.cloud.account})</span>
+        <h3 className="flex-1 font-semibold text-fg">
+          Choose your printer{" "}
+          <span className="font-normal text-fg-muted">({status.cloud.account})</span>
         </h3>
         <Button onClick={onSignOut} disabled={busy !== null}>
           Sign out
@@ -505,7 +509,7 @@ function AccountPrinters({
       {printers?.map((p) => (
         <div
           key={p.serial}
-          className="rounded-md border border-ink-700 p-2.5"
+          className="rounded-md border border-line p-3"
           data-testid="account-printer"
         >
           <div className="flex items-center gap-2">
@@ -550,7 +554,7 @@ function AccountPrinters({
         </div>
       ))}
       {!status.hosted && (
-        <p className="text-2xs leading-4 text-fg-dim">
+        <p className="text-[12px] leading-5 text-fg-muted">
           Bambu Cloud works from anywhere but is read-only (current firmware rejects unsigned
           control). LAN gives control when the printer has LAN Only + Developer Mode enabled; find
           its IP on the printer under Settings → Network.
@@ -566,7 +570,7 @@ function ManualLan({ busy, run }: { busy: string | null; run: Run }) {
   const [code, setCode] = useState("");
   return (
     <form
-      className="grid grid-cols-3 gap-2"
+      className="grid gap-2 sm:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
         void run("manual", () =>
@@ -592,7 +596,7 @@ function ManualLan({ busy, run }: { busy: string | null; run: Run }) {
           onChange={(e) => setCode(e.target.value.trim())}
         />
       </Field>
-      <p className="col-span-2 self-center text-2xs text-fg-dim">
+      <p className="self-center text-[12px] text-fg-muted">
         Only for a printer other than the built-in one.
       </p>
       <Button type="submit" variant="primary" disabled={busy !== null || !host || !serial || !code}>

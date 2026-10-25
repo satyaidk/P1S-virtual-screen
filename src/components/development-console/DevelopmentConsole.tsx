@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { MonitorUp } from "lucide-react";
 import { PrinterRuntimeProvider } from "@/hooks/usePrinter";
+import { cn } from "@/lib/cn";
 import { defaultProviderConfig, type ProviderConfig } from "@/printer/providers/provider-factory";
 import { ConnectionPanel } from "./ConnectionPanel";
 import { DisplayStage } from "./DisplayStage";
@@ -10,64 +12,86 @@ import { PrinterSetup } from "./PrinterSetup";
 import { SimulationControls } from "./SimulationControls";
 import { StateInspector } from "./StateInspector";
 
-/** `demo` switches to the built-in simulator (development only; `/?demo=1`). */
+/**
+ * Layout: the device and the one task that drives it (connecting a printer, or steering the
+ * simulator) share the first screen; diagnostics for developers sit below.
+ *
+ * `demo` switches to the built-in simulator (development only; `/?demo=1`).
+ */
 export function DevelopmentConsole({ demo = false }: { demo?: boolean }) {
   const [config] = useState<ProviderConfig>(() => defaultProviderConfig(demo));
   const simulated = config.mode === "simulation";
 
   return (
-    <div className="min-h-screen bg-ink-950 text-fg">
-      <header className="flex h-12 items-center gap-3 border-b border-ink-700 px-4">
-        <h1 className="text-sm font-semibold">P1S Virtual Screen</h1>
-        <span className="text-xs text-fg-dim">Development console</span>
-        <span className="flex-1" />
-        {simulated && (
-          <span className="rounded bg-info-soft px-1.5 py-0.5 text-2xs font-bold text-info">
-            DEMO DATA
-          </span>
-        )}
-        <a
-          href={simulated ? "/" : "/?demo=1"}
-          className="text-xs text-fg-dim hover:text-fg"
-          data-testid="toggle-demo"
-        >
-          {simulated ? "Use my printer" : "Demo mode"}
-        </a>
-        <a
-          href={simulated ? "/display?demo=1" : "/display"}
-          className="text-xs text-info hover:underline"
-          data-testid="open-display"
-        >
-          Open display only →
-        </a>
+    <div className="min-h-screen bg-bench text-fg">
+      <header className="sticky top-0 z-10 border-b border-line bg-bench/90 backdrop-blur">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6">
+          <a href={simulated ? "/?demo=1" : "/"} className="flex items-center gap-2.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icon.svg" alt="" width={26} height={26} />
+            <span className="text-[15px] font-semibold">P1S Virtual Screen</span>
+          </a>
+          <nav aria-label="Data source" className="flex rounded-md border border-line p-0.5">
+            <SourceLink href="/" active={!simulated} testId="source-live">
+              My printer
+            </SourceLink>
+            <SourceLink href="/?demo=1" active={simulated} testId="source-demo">
+              Demo printer
+            </SourceLink>
+          </nav>
+          <span className="flex-1" />
+          <a
+            href={simulated ? "/display?demo=1" : "/display"}
+            className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-[13px] font-medium text-fg-muted hover:bg-surface-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-mat-ink"
+            data-testid="open-display"
+          >
+            <MonitorUp size={16} aria-hidden />
+            Open display only
+          </a>
+        </div>
       </header>
       <PrinterRuntimeProvider
         config={config}
         fallback={<p className="p-6 text-sm text-fg-muted">Starting printer runtime…</p>}
       >
-        <main className="grid gap-4 p-4 xl:grid-cols-[minmax(0,auto)_minmax(420px,1fr)]">
-          <div className="flex flex-col gap-4">
-            <div className="flex justify-center overflow-auto rounded-lg border border-ink-700 bg-ink-900 p-6">
-              <DisplayStage />
-            </div>
-            {simulated ? (
-              <div className="grid gap-4 lg:grid-cols-2">
-                <SimulationControls />
-                <ConnectionPanel />
-              </div>
-            ) : (
-              <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
-                <PrinterSetup />
-                <ConnectionPanel />
-              </div>
-            )}
+        <main className="mx-auto grid max-w-[1600px] gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <DisplayStage />
+          <div className="flex min-w-0 flex-col gap-4">
+            {simulated ? <SimulationControls /> : <PrinterSetup />}
+            <ConnectionPanel />
           </div>
-          <div className="grid content-start gap-4">
+          <div className="grid min-w-0 gap-4 lg:col-span-2 xl:grid-cols-2">
             <EventLog />
             <StateInspector />
           </div>
         </main>
       </PrinterRuntimeProvider>
     </div>
+  );
+}
+
+function SourceLink({
+  href,
+  active,
+  testId,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  testId: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      aria-current={active ? "page" : undefined}
+      data-testid={testId}
+      className={cn(
+        "rounded-[5px] px-2.5 py-1 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-mat-ink",
+        active ? "bg-surface-raised text-fg" : "text-fg-muted hover:text-fg",
+      )}
+    >
+      {children}
+    </a>
   );
 }
