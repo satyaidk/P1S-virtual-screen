@@ -14,18 +14,24 @@ export function StateInspector() {
   return (
     <Panel
       title="Printer state"
+      description="The exact object the display renders."
       testId="state-inspector"
       actions={
         <>
-          <Button onClick={() => setFrozen(frozen ? null : JSON.stringify(state, null, 2))}>
-            {frozen ? "Live" : "Hold"}
+          <Button
+            variant={frozen ? "active" : "default"}
+            onClick={() => setFrozen(frozen ? null : JSON.stringify(state, null, 2))}
+          >
+            {frozen ? "Resume live" : "Hold"}
           </Button>
-          <Button onClick={() => void navigator.clipboard?.writeText(json)}>Copy</Button>
+          <Button variant="ghost" onClick={() => void navigator.clipboard?.writeText(json)}>
+            Copy
+          </Button>
         </>
       }
     >
       <pre
-        className="h-[360px] overflow-auto rounded-md bg-ink-950 p-2 font-mono text-2xs leading-4 text-fg-muted"
+        className="h-[400px] overflow-auto rounded-md bg-bench p-3 font-mono text-[11.5px] leading-5 text-fg-muted"
         data-testid="state-json"
       >
         {json}

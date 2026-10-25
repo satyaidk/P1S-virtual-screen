@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, Segmented } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { usePrinter, useRuntime } from "@/hooks/usePrinter";
 import { cn } from "@/lib/cn";
@@ -36,35 +36,41 @@ export function EventLog() {
 
   return (
     <Panel
-      title="Diagnostics"
+      title="Activity"
+      description="Newest first."
       testId="event-log"
       actions={
         <>
-          {(["events", "telemetry", "commands"] as const).map((t) => (
-            <Button
-              key={t}
-              variant={tab === t ? "active" : "default"}
-              onClick={() => setTab(t)}
-              data-testid={`log-tab-${t}`}
-            >
-              {t}
-            </Button>
-          ))}
-          <Button onClick={() => runtime.log.clear()}>Clear</Button>
+          <Segmented
+            label="Activity view"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: "events", label: "Events", testId: "log-tab-events" },
+              { value: "telemetry", label: "Telemetry", testId: "log-tab-telemetry" },
+              { value: "commands", label: "Commands", testId: "log-tab-commands" },
+            ]}
+          />
+          <Button variant="ghost" onClick={() => runtime.log.clear()}>
+            Clear
+          </Button>
         </>
       }
     >
       {tab === "events" && (
         <>
-          <div className="mb-2 flex flex-wrap gap-1">
+          <div className="mb-2 flex flex-wrap gap-1" role="group" aria-label="Filter events">
             {CATEGORIES.map((c) => (
               <button
                 key={c}
                 type="button"
+                aria-pressed={filter === c}
                 onClick={() => setFilter(c)}
                 className={cn(
-                  "rounded px-1.5 py-0.5 text-2xs",
-                  filter === c ? "bg-ink-700 text-fg" : "text-fg-dim hover:text-fg",
+                  "rounded-full border px-2.5 py-0.5 text-[12px] capitalize focus-visible:outline-2 focus-visible:outline-mat-ink",
+                  filter === c
+                    ? "border-mat-ink bg-mat text-fg"
+                    : "border-line text-fg-muted hover:text-fg",
                 )}
               >
                 {c}
@@ -72,15 +78,16 @@ export function EventLog() {
             ))}
           </div>
           <ol
-            className="h-[300px] overflow-auto font-mono text-2xs leading-4"
+            className="h-[330px] overflow-auto rounded-md bg-bench px-2 font-mono text-[11.5px] leading-5"
             data-testid="event-list"
           >
             {shown.map((e) => (
-              <li key={e.id} className="flex gap-2 border-b border-ink-800 py-0.5">
+              <li key={e.id} className="flex flex-wrap gap-x-2 border-b border-line/60 py-0.5">
                 <span className="shrink-0 text-fg-dim">{time(e.at)}</span>
-                <span className="w-16 shrink-0 text-fg-muted">{e.category}</span>
+                <span className="w-[5.5rem] shrink-0 text-fg-muted">{e.category}</span>
                 <span
                   className={cn(
+                    "min-w-0 basis-full sm:flex-1 sm:basis-auto",
                     e.level === "error" && "text-danger",
                     e.level === "warn" && "text-warn",
                   )}
@@ -89,20 +96,24 @@ export function EventLog() {
                 </span>
               </li>
             ))}
-            {shown.length === 0 && <li className="text-fg-dim">No events</li>}
+            {shown.length === 0 && (
+              <li className="py-2 font-sans text-[13px] text-fg-muted">
+                No events in this category yet.
+              </li>
+            )}
           </ol>
         </>
       )}
       {tab === "telemetry" && (
         <ol
-          className="h-[326px] overflow-auto font-mono text-2xs leading-4"
+          className="h-[362px] overflow-auto rounded-md bg-bench px-2 font-mono text-[11.5px] leading-5"
           data-testid="telemetry-list"
         >
           {telemetry
             .slice()
             .reverse()
             .map((t) => (
-              <li key={t.id} className="border-b border-ink-800 py-0.5">
+              <li key={t.id} className="border-b border-line/60 py-0.5">
                 <span className="text-fg-dim">{time(t.at)}</span>{" "}
                 <span className="text-fg-muted">{t.changed.join(", ")}</span>
               </li>
@@ -111,19 +122,19 @@ export function EventLog() {
       )}
       {tab === "commands" && (
         <ol
-          className="h-[326px] overflow-auto font-mono text-2xs leading-4"
+          className="h-[362px] overflow-auto rounded-md bg-bench px-2 font-mono text-[11.5px] leading-5"
           data-testid="command-list"
         >
           {requests
             .slice()
             .reverse()
             .map((r) => (
-              <li key={r.id} className="flex gap-2 border-b border-ink-800 py-0.5">
+              <li key={r.id} className="flex gap-2 border-b border-line/60 py-0.5">
                 <span className="shrink-0 text-fg-dim">{time(r.startedAt)}</span>
                 <span className="w-32 shrink-0">{r.command.type}</span>
                 <span
                   className={cn(
-                    "w-16 shrink-0",
+                    "w-20 shrink-0",
                     r.status === "succeeded" && "text-ok",
                     r.status === "pending" && "text-info",
                     (r.status === "failed" || r.status === "timeout") && "text-danger",
