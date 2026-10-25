@@ -4,6 +4,11 @@
 @import "@fontsource/inter/600.css";
 @import "@fontsource/inter/700.css";
 @import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
 
 /*
  * Design tokens. The virtual display uses only these colours so the palette can be reproduced as
@@ -11,8 +16,24 @@
  * green = running/ok, blue = in progress/info, amber = attention, red = fault/destructive.
  */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* Console chrome uses IBM Plex; the virtual display keeps Inter, the font planned for the panel. */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /*
+   * Development-console palette (never used inside the virtual display). The stage is a
+   * self-healing cutting mat, the surface a maker's bench sits on; panels are graphite around it.
+   */
+  --color-bench: #181b1f;
+  --color-surface: #1f2328;
+  --color-surface-raised: #272c32;
+  --color-line: #313840;
+  --color-line-strong: #434b54;
+  --color-mat: #1c3530;
+  --color-mat-line: #22403a;
+  --color-mat-major: #305a50;
+  --color-mat-ink: #8fc9b6;
 
   --color-ink-950: #0a0c0d;
   --color-ink-900: #111416;
@@ -55,7 +76,7 @@
 
 html,
 body {
-  background: var(--color-ink-950);
+  background: var(--color-bench);
   color: var(--color-fg);
 }
 
@@ -73,6 +94,22 @@ body {
 
 .touch:not(:disabled):active {
   filter: brightness(1.35);
+}
+
+/* Cutting-mat grid behind the device: 10 px minor and 50 px major lines. */
+.cutting-mat {
+  background-color: var(--color-mat);
+  background-image:
+    linear-gradient(var(--color-mat-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-mat-major) 1px, transparent 1px),
+    linear-gradient(var(--color-mat-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-mat-line) 1px, transparent 1px);
+  background-size:
+    50px 50px,
+    50px 50px,
+    10px 10px,
+    10px 10px;
+  background-position: -1px -1px;
 }
 
 .tabular {

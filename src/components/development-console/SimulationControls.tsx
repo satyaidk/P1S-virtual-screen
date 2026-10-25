@@ -1,14 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { useState, type ReactNode } from "react";
+import { Button, Segmented } from "@/components/ui/Button";
+import { fieldClass } from "@/components/ui/field";
 import { Panel } from "@/components/ui/Panel";
 import { usePrinter, useRuntime } from "@/hooks/usePrinter";
+import { cn } from "@/lib/cn";
 import { SCENARIOS } from "@/printer/simulation/scenarios";
 import { SIM_FAULTS, type SimFault } from "@/printer/simulation/simulation-engine";
 import { formatDuration } from "@/lib/format";
 
 const SPEEDS = [0, 1, 10, 30, 60, 120];
+
+const selectClass = cn(fieldClass, "w-full");
+
+function Group({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[13px] text-fg-muted">{label}</span>
+      {children}
+    </div>
+  );
+}
 
 export function SimulationControls() {
   const runtime = useRuntime();
@@ -19,31 +32,33 @@ export function SimulationControls() {
 
   if (!controls || !sim) {
     return (
-      <Panel title="Simulation">
-        <p className="text-xs text-fg-muted">
-          Simulation controls are only available with the simulated provider.
+      <Panel title="Demo printer">
+        <p className="text-[13px] text-fg-muted">
+          Simulation controls are only available with the demo printer.
         </p>
       </Panel>
     );
   }
 
+  const speed = sim.running ? sim.speedMultiplier : 0;
+
   return (
     <Panel
-      title="Simulation"
+      title="Demo printer"
+      description="Drive the simulator to see each screen state."
       testId="simulation-controls"
       actions={
-        <span className="font-mono text-2xs text-fg-dim">
-          sim t = {formatDuration(sim.simulatedTimeMs / 1000)}
+        <span className="tabular font-mono text-[12px] text-fg-muted" title="Simulated time">
+          {formatDuration(sim.simulatedTimeMs / 1000)}
         </span>
       }
     >
-      <div className="flex flex-col gap-3 text-xs">
-        <label className="flex items-center gap-2">
-          <span className="w-20 text-fg-muted">Scenario</span>
+      <div className="flex flex-col gap-4">
+        <Group label="Scenario">
           <select
             value={sim.scenarioId}
             onChange={(e) => controls.loadScenario(e.target.value)}
-            className="h-8 flex-1 rounded-md border border-ink-600 bg-ink-850 px-2"
+            className={selectClass}
             data-testid="scenario-select"
           >
             {SCENARIOS.map((s) => (
@@ -52,118 +67,145 @@ export function SimulationControls() {
               </option>
             ))}
           </select>
-        </label>
+        </Group>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="w-20 text-fg-muted">Job</span>
-          <Button
-            variant="primary"
-            onClick={() => void runtime.execute({ type: "start_sample_job" })}
-            data-testid="sim-start"
-          >
-            Start
-          </Button>
-          <Button
-            onClick={() => void runtime.execute({ type: "pause" })}
-            data-testid="sim-pause"
-            disabled={status !== "printing"}
-          >
-            Pause
-          </Button>
-          <Button
-            onClick={() => void runtime.execute({ type: "resume" })}
-            data-testid="sim-resume"
-            disabled={status !== "paused"}
-          >
-            Resume
-          </Button>
-          <Button onClick={() => controls.completeJob()} data-testid="sim-complete">
-            Complete
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="w-20 text-fg-muted">Speed</span>
-          {SPEEDS.map((s) => (
+        <Group label="Print job">
+          <div className="flex flex-wrap gap-1.5">
             <Button
-              key={s}
-              variant={sim.speedMultiplier === s && sim.running ? "active" : "default"}
-              onClick={() => {
+              variant="primary"
+              onClick={() => void runtime.execute({ type: "start_sample_job" })}
+              data-testid="sim-start"
+            >
+              Start
+            </Button>
+            <Button
+              onClick={() => void runtime.execute({ type: "pause" })}
+              data-testid="sim-pause"
+              disabled={status !== "printing"}
+            >
+              Pause
+            </Button>
+            <Button
+              onClick={() => void runtime.execute({ type: "resume" })}
+              data-testid="sim-resume"
+              disabled={status !== "paused"}
+            >
+              Resume
+            </Button>
+            <Button onClick={() => controls.completeJob()} data-testid="sim-complete">
+              Finish now
+            </Button>
+          </div>
+        </Group>
+
+        <Group label="Simulation speed">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Segmented
+              label="Simulation speed"
+              value={speed}
+              onChange={(s) => {
                 controls.setSpeedMultiplier(s);
                 controls.setRunning(s > 0);
               }}
-              data-testid={`sim-speed-${s}`}
-            >
-              {s === 0 ? "Pause sim" : `${s}×`}
+              items={SPEEDS.map((s) => ({
+                value: s,
+                label: s === 0 ? "Stop" : `${s}×`,
+                testId: `sim-speed-${s}`,
+              }))}
+            />
+            <Button variant="ghost" onClick={() => controls.stepBy(60_000)} data-testid="sim-step">
+              +1 min
             </Button>
-          ))}
-          <Button onClick={() => controls.stepBy(60_000)} data-testid="sim-step">
-            +1 min
-          </Button>
-        </div>
+          </div>
+        </Group>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="w-20 text-fg-muted">Fault</span>
-          <select
-            value={fault}
-            onChange={(e) => setFault(e.target.value as SimFault)}
-            className="h-8 flex-1 rounded-md border border-ink-600 bg-ink-850 px-2"
-            data-testid="fault-select"
-          >
-            {SIM_FAULTS.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
-          </select>
+        <Group label="Fault">
+          <div className="flex gap-1.5">
+            <select
+              value={fault}
+              onChange={(e) => setFault(e.target.value as SimFault)}
+              className={selectClass}
+              data-testid="fault-select"
+            >
+              {SIM_FAULTS.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="danger"
+              onClick={() => controls.injectFault(fault)}
+              data-testid="sim-inject"
+            >
+              Trigger
+            </Button>
+          </div>
           <Button
-            variant="danger"
-            onClick={() => controls.injectFault(fault)}
-            data-testid="sim-inject"
+            variant="ghost"
+            className="-ml-3 self-start"
+            onClick={() => controls.clearAlerts()}
           >
-            Trigger
+            Clear alerts
           </Button>
-          <Button onClick={() => controls.clearAlerts()}>Clear alerts</Button>
-        </div>
+        </Group>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="w-20 text-fg-muted">Network</span>
+        <Group label="Network">
+          <div className="flex flex-wrap gap-1.5">
+            <Toggle on={sim.wifiUp} onClick={() => controls.setWifi(!sim.wifiUp)} testId="sim-wifi">
+              Wi-Fi {sim.wifiUp ? "up" : "down"}
+            </Toggle>
+            <Toggle on={sim.mqttUp} onClick={() => controls.setMqtt(!sim.mqttUp)} testId="sim-mqtt">
+              MQTT {sim.mqttUp ? "up" : "down"}
+            </Toggle>
+            <Toggle
+              on={!sim.telemetryFrozen}
+              onClick={() => controls.setTelemetryFrozen(!sim.telemetryFrozen)}
+              testId="sim-freeze"
+            >
+              {sim.telemetryFrozen ? "Telemetry frozen" : "Telemetry live"}
+            </Toggle>
+          </div>
           <Button
-            variant={sim.wifiUp ? "default" : "danger"}
-            onClick={() => controls.setWifi(!sim.wifiUp)}
-            data-testid="sim-wifi"
-          >
-            Wi-Fi {sim.wifiUp ? "up" : "down"}
-          </Button>
-          <Button
-            variant={sim.mqttUp ? "default" : "danger"}
-            onClick={() => controls.setMqtt(!sim.mqttUp)}
-            data-testid="sim-mqtt"
-          >
-            MQTT {sim.mqttUp ? "up" : "down"}
-          </Button>
-          <Button
-            variant={sim.telemetryFrozen ? "danger" : "default"}
-            onClick={() => controls.setTelemetryFrozen(!sim.telemetryFrozen)}
-            data-testid="sim-freeze"
-          >
-            {sim.telemetryFrozen ? "Telemetry frozen" : "Freeze telemetry"}
-          </Button>
-          <Button
-            variant="primary"
+            variant="ghost"
+            className="-ml-3 self-start"
             onClick={() => controls.restoreConnectivity()}
             data-testid="sim-restore"
           >
-            Restore
+            Restore all connections
           </Button>
-        </div>
+        </Group>
 
-        <div className="flex justify-end">
+        <div className="border-t border-line pt-3">
           <Button variant="danger" onClick={() => controls.reset()} data-testid="sim-reset">
             Reset simulation
           </Button>
         </div>
       </div>
     </Panel>
+  );
+}
+
+/** On/off switch-button: the dot shows the current state, the label names it. */
+function Toggle({
+  on,
+  onClick,
+  testId,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      onClick={onClick}
+      data-testid={testId}
+      className={cn(!on && "border-danger/60 bg-danger-soft")}
+    >
+      <span aria-hidden className={cn("size-2 rounded-full", on ? "bg-ok" : "bg-danger")} />
+      {children}
+    </Button>
   );
 }

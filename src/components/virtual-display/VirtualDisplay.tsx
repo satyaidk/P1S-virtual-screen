@@ -83,7 +83,7 @@ export function VirtualDisplay() {
           e.stopPropagation();
         }
       }}
-      className="relative overflow-hidden bg-ink-950 font-sans text-fg select-none"
+      className="relative overflow-hidden bg-ink-950 font-display text-fg select-none"
       style={{ width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT }}
     >
       <div
