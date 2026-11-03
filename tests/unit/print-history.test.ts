@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { taskMatchesJob } from "@/hooks/usePrintHistory";
 import { formatRemaining } from "@/lib/format";
-import { BambuCloudClient } from "@/server/bambu-cloud";
+import { BambuCloudClient, coverUrlOf, sniffImageType } from "@/server/bambu-cloud";
 import { clearCoverCache, fetchCover, listPublicTasks } from "@/server/print-history";
 import { fakeFetch, jsonResponse } from "../support/fake-fetch";
 
@@ -106,5 +106,49 @@ describe("formatRemaining", () => {
     expect(formatRemaining(65 * 60)).toBe("About 1h 05min left");
     expect(formatRemaining(20)).toBe("Less than 1min left");
     expect(formatRemaining(null)).toBe("--");
+  });
+});
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+
+describe("cover download robustness", () => {
+  beforeEach(() => clearCoverCache());
+
+  it("accepts an S3 cover labelled binary/octet-stream by sniffing the bytes", async () => {
+    const { ctx } = client({
+      "GET /cover-111.png?sig=abc": () =>
+        new Response(JPEG, { headers: { "content-type": "binary/octet-stream" } }),
+    });
+    const img = await fetchCover(ctx, "111");
+    expect(img.contentType).toBe("image/jpeg");
+  });
+
+  it("rejects a non-image body even when it claims to be one", async () => {
+    const { ctx } = client({
+      "GET /cover-111.png?sig=abc": () =>
+        new Response("<html>denied</html>", { headers: { "content-type": "text/html" } }),
+    });
+    await expect(fetchCover(ctx, "111")).rejects.toMatchObject({
+      status: 502,
+      message: "Cover is not an image (text/html)",
+    });
+  });
+
+  it("finds the cover URL in the documented field and safe fallbacks", () => {
+    expect(coverUrlOf({ cover: "https://a.example/c.png" })).toBe("https://a.example/c.png");
+    expect(coverUrlOf({ cover: "//a.example/c.png" })).toBe("https://a.example/c.png");
+    expect(coverUrlOf({ cover: "", thumbnail: "https://a.example/t.jpg" })).toBe(
+      "https://a.example/t.jpg",
+    );
+    expect(coverUrlOf({ cover: "javascript:alert(1)" })).toBeNull();
+    expect(coverUrlOf({})).toBeNull();
+  });
+
+  it("sniffs common image formats", () => {
+    expect(sniffImageType(PNG)).toBe("image/png");
+    expect(sniffImageType(JPEG)).toBe("image/jpeg");
+    expect(sniffImageType(new TextEncoder().encode("RIFF1234WEBPVP8 "))).toBe("image/webp");
+    expect(sniffImageType(new TextEncoder().encode("<svg"))).toBeNull();
   });
 });
