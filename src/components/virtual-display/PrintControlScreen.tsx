@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Lightbulb, LightbulbOff, OctagonX, Pause, Play, RefreshCw } from "lucide-react";
+import { Fan, Lightbulb, LightbulbOff, Move, OctagonX, Pause, Play, RefreshCw } from "lucide-react";
+import { useDisplayStore } from "@/display/display-store";
 import { usePrinter, useRuntime, useCommandValidation } from "@/hooks/usePrinter";
 import { prettyJobName } from "@/lib/format";
 import type { CommandType } from "@/printer/commands";
@@ -22,6 +23,8 @@ export function PrintControlScreen({ now }: { now: number }) {
   const jobName = usePrinter((s) => s.state.job.name);
   const speedLevel = usePrinter((s) => s.state.speedLevel);
   const light = usePrinter((s) => s.state.chamberLight);
+  const partFan = usePrinter((s) => s.state.fans.part);
+  const go = useDisplayStore((s) => s.go);
   const [confirmStop, setConfirmStop] = useState(false);
 
   const paused = status === "paused";
@@ -101,24 +104,41 @@ export function PrintControlScreen({ now }: { now: number }) {
           </div>
         </div>
 
-        <div className="mt-auto flex gap-1.5">
+        <div className="mt-auto grid grid-cols-4 gap-1">
           <TouchButton
             icon={light ? Lightbulb : LightbulbOff}
             pending={lightPending}
             disabled={!lightValid.ok || light === null}
-            className="h-9 flex-1"
+            className="h-9 px-1"
             onClick={() =>
               light !== null && void runtime.execute({ type: "set_chamber_light", on: !light })
             }
+            aria-label={`Chamber light ${light === null ? "unknown" : light ? "on" : "off"}`}
             data-testid="light"
           >
-            Light {light === null ? "--" : light ? "on" : "off"}
+            {light === null ? "--" : light ? "On" : "Off"}
+          </TouchButton>
+          <TouchButton
+            icon={Fan}
+            className="h-9 px-1 tabular"
+            onClick={() => go("fans")}
+            data-testid="open-fans"
+          >
+            {partFan === null ? "Fans" : `${partFan}%`}
+          </TouchButton>
+          <TouchButton
+            icon={Move}
+            className="h-9 px-1"
+            onClick={() => go("move")}
+            data-testid="open-move"
+          >
+            Move
           </TouchButton>
           <TouchButton
             icon={RefreshCw}
             pending={refreshPending}
             disabled={!refreshValid.ok}
-            className="h-9 flex-1"
+            className="h-9 px-1"
             onClick={() => void runtime.execute({ type: "request_full_status" })}
             data-testid="refresh"
           >

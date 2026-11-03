@@ -40,6 +40,9 @@ the state model and command rules are proven here first, then ported. Everything
 - **Complete display.** Home (job, progress, ETA, temperatures, active filament), temperature
   control, AMS trays, print control (pause/resume, stop with confirmation, speed presets, light),
   printer info, settings and notifications.
+- **P2S-style panels.** The job's 3D plate preview on Home (from Bambu Cloud), print history with
+  previews, fan control (part / aux / chamber, hotend fan shown), and axis jog / home / extrude
+  (locked while printing; extrusion needs a hot nozzle).
 - **Honest states.** Offline, connecting, idle, preparing, printing, paused, finished,
   cancelled/failed, error and stale telemetry each have a defined look; unknown values are shown as
   unknown, never invented.
@@ -274,7 +277,10 @@ Known limitations:
 - Bambu Cloud connections are read-only; control requires LAN + Developer Mode.
 - Bambu's API sits behind Cloudflare and occasionally blocks non-browser clients; the console then
   shows "Blocked by Bambu's Cloudflare protection". Retry later or use LAN.
-- No job thumbnails or camera (not available over MQTT on the P1S).
+- Job previews and print history need a Bambu account sign-in, and only exist for prints started
+  through the cloud (Handy, Bambu Studio, MakerWorld) — not SD-card or LAN-only prints.
+- No camera (the P1S does not stream it over MQTT).
+- Fans and motion are LAN-only controls, like every other command (cloud is view-only).
 - Brightness, sleep and sound are browser simulations of hardware features.
 
 ## Contributing
