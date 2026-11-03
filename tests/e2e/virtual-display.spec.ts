@@ -306,6 +306,7 @@ test("new sub-screens fit the 320x240 canvas", async ({ page }) => {
     [["tab-control", "open-fans"], "fans"],
     [["tab-control", "open-move"], "move"],
     [["tab-menu", "menu-history"], "history"],
+    [["tab-menu", "menu-info"], "info"],
   ] as const) {
     for (const id of open) await display(page).getByTestId(id).click();
     await expect(display(page)).toHaveAttribute("data-screen", screenId);
@@ -314,9 +315,15 @@ test("new sub-screens fit the 320x240 canvas", async ({ page }) => {
       return { scroll: inner.scrollHeight, client: inner.clientHeight };
     });
     expect(overflow.scroll, screenId).toBeLessThanOrEqual(overflow.client);
+    if (screenId === "history")
+      // Demo mode has no Bambu Cloud: history explains instead of failing.
+      await expect(display(page).getByTestId("history-empty")).toContainText("Bambu Cloud");
   }
-  // Demo mode has no Bambu Cloud: history explains instead of failing.
-  await expect(display(page).getByTestId("history-empty")).toContainText("Bambu Cloud");
+  // The build stamp tells which commit a deployment is running.
+  await expect(display(page).getByTestId("info-app-build")).toHaveText(/^[0-9a-f]{7}|unknown$/);
+  await expect(page.getByTestId("build-commit")).toHaveText(/^build /);
+  const version = await (await page.request.get("/api/version")).json();
+  expect(version.commit).toMatch(/^[0-9a-f]{7}|unknown$/);
 });
 
 test("settings simulate brightness, rotation, theme and sleep", async ({ page }) => {
