@@ -7,9 +7,12 @@ import { useNow } from "@/hooks/useNow";
 import { AMSScreen } from "./AMSScreen";
 import { CommandFeedback } from "./CommandFeedback";
 import { ErrorScreen } from "./ErrorScreen";
+import { FansScreen } from "./FansScreen";
+import { HistoryScreen } from "./HistoryScreen";
 import { InfoScreen } from "./InfoScreen";
 import { MainScreen } from "./MainScreen";
 import { MenuScreen } from "./MenuScreen";
+import { MoveScreen } from "./MoveScreen";
 import { Navigation } from "./Navigation";
 import { PrintControlScreen } from "./PrintControlScreen";
 import { SettingsScreen } from "./SettingsScreen";
@@ -133,6 +136,12 @@ function ScreenRouter({ screen, now }: { screen: string; now: number }) {
       return <SettingsScreen />;
     case "notifications":
       return <ErrorScreen now={now} />;
+    case "fans":
+      return <FansScreen now={now} />;
+    case "move":
+      return <MoveScreen now={now} />;
+    case "history":
+      return <HistoryScreen />;
     default:
       return <MainScreen now={now} />;
   }

@@ -113,6 +113,20 @@ export interface ConnectionInfo {
   lastError: string | null;
 }
 
+/** Fan speeds in percent (0..100), null when not reported. */
+export interface FanState {
+  /** Part-cooling fan on the toolhead (`cooling_fan_speed`, M106 P1). */
+  part: number | null;
+  /** Auxiliary side fan (`big_fan1_speed`, M106 P2). */
+  aux: number | null;
+  /** Chamber / exhaust fan (`big_fan2_speed`, M106 P3). */
+  chamber: number | null;
+  /** Hotend heatbreak fan (`heatbreak_fan_speed`); firmware-controlled, read-only. */
+  heatbreak: number | null;
+}
+
+export type ControllableFan = "part" | "aux" | "chamber";
+
 export interface PrinterState {
   source: DataSource;
   info: PrinterInfo;
@@ -123,6 +137,7 @@ export interface PrinterState {
   bed: Temperature;
   speedLevel: SpeedLevel | null;
   chamberLight: boolean | null;
+  fans: FanState;
   ams: AmsState;
   /** Raw Bambu `print_error` code (0 = none). */
   printErrorCode: number | null;

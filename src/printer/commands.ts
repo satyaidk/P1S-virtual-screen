@@ -1,5 +1,11 @@
-import { BED_MAX_C, NOZZLE_MAX_C, isTelemetryStale } from "./state";
-import type { PrinterState, SpeedLevel } from "./types";
+import { BED_MAX_C, MIN_EXTRUDE_C, NOZZLE_MAX_C, isJobActive, isTelemetryStale } from "./state";
+import type { ControllableFan, PrinterState, SpeedLevel } from "./types";
+
+export type Axis = "X" | "Y" | "Z";
+
+/** Longest single jog / extrusion accepted from the screen. */
+export const MAX_JOG_MM = 50;
+export const MAX_EXTRUDE_MM = 50;
 
 /**
  * UI-level intents. These are transport independent; protocol/command-builders.ts maps the
@@ -14,6 +20,12 @@ export type PrinterCommand =
   | { type: "set_nozzle_target"; celsius: number }
   | { type: "set_bed_target"; celsius: number }
   | { type: "set_chamber_light"; on: boolean }
+  | { type: "set_fan"; fan: ControllableFan; percent: number }
+  /** Relative jog of one axis; positive/negative millimetres. Never while a print runs. */
+  | { type: "move_axis"; axis: Axis; distanceMm: number }
+  | { type: "home_axes" }
+  /** Positive extrudes, negative retracts. Requires a hot nozzle. */
+  | { type: "extrude"; distanceMm: number }
   | { type: "request_full_status" }
   /** Simulation only: there is no verified "start a print" command for this UI yet. */
   | { type: "start_sample_job" };
@@ -86,6 +98,35 @@ export const COMMAND_SPECS: Record<CommandType, CommandSpec> = {
     idempotent: true,
     pendingLabel: "Switching light…",
     successLabel: "Light switched",
+  },
+  set_fan: {
+    label: "Set fan",
+    destructive: false,
+    idempotent: true,
+    pendingLabel: "Setting fan…",
+    successLabel: "Fan speed set",
+  },
+  // Motion commands are relative: re-sending one would move twice, so never retry them.
+  move_axis: {
+    label: "Move axis",
+    destructive: false,
+    idempotent: false,
+    pendingLabel: "Moving…",
+    successLabel: "Moved",
+  },
+  home_axes: {
+    label: "Home axes",
+    destructive: false,
+    idempotent: false,
+    pendingLabel: "Homing…",
+    successLabel: "Homing started",
+  },
+  extrude: {
+    label: "Extrude",
+    destructive: false,
+    idempotent: false,
+    pendingLabel: "Extruding…",
+    successLabel: "Done",
   },
   request_full_status: {
     label: "Refresh status",
@@ -165,6 +206,33 @@ export function validateCommand(
       return validateTarget(command.celsius, BED_MAX_C, "Bed");
     case "set_chamber_light":
       return ok;
+    case "set_fan":
+      if (!["part", "aux", "chamber"].includes(command.fan)) return fail("Unknown fan");
+      if (!Number.isInteger(command.percent) || command.percent < 0 || command.percent > 100)
+        return fail("Fan speed must be 0–100 %");
+      return ok;
+    case "move_axis":
+      if (!["X", "Y", "Z"].includes(command.axis)) return fail("Unknown axis");
+      if (
+        !Number.isFinite(command.distanceMm) ||
+        command.distanceMm === 0 ||
+        Math.abs(command.distanceMm) > MAX_JOG_MM
+      )
+        return fail(`Move must be 1–${MAX_JOG_MM} mm`);
+      return isJobActive(state) ? fail("Axes are locked while printing") : ok;
+    case "home_axes":
+      return isJobActive(state) ? fail("Axes are locked while printing") : ok;
+    case "extrude":
+      if (
+        !Number.isFinite(command.distanceMm) ||
+        command.distanceMm === 0 ||
+        Math.abs(command.distanceMm) > MAX_EXTRUDE_MM
+      )
+        return fail(`Extrusion must be 1–${MAX_EXTRUDE_MM} mm`);
+      if (isJobActive(state)) return fail("Extruder is locked while printing");
+      if ((state.nozzle.current ?? 0) < MIN_EXTRUDE_C)
+        return fail(`Heat the nozzle to ${MIN_EXTRUDE_C} °C first`);
+      return ok;
     case "request_full_status":
       return ok;
     case "start_sample_job":
@@ -194,6 +262,16 @@ export function commandEffectObserved(command: PrinterCommand, state: PrinterSta
       return state.bed.target === command.celsius;
     case "set_chamber_light":
       return state.chamberLight === command.on;
+    case "set_fan": {
+      // Telemetry reports 16 levels rounded to 10 %, so accept the nearest reported step.
+      const reported = state.fans[command.fan];
+      return reported !== null && Math.abs(reported - command.percent) <= 10;
+    }
+    // No position telemetry exists on P1 firmware: the printer's ack is the only evidence.
+    case "move_axis":
+    case "home_axes":
+    case "extrude":
+      return true;
     case "request_full_status":
       return true;
     case "start_sample_job":

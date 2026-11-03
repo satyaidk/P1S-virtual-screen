@@ -65,11 +65,15 @@ app does not re-bind: it signs in to the account the printer is already bound to
 | `GET devices`     | —                                                                                                                                                                | Printers bound to the account (serial, name, online…). Access codes are never returned.                                                                        |
 | `POST connect`    | `{source:"access-code", accessCode, host?}` (default), `{source:"account", serial, mode:"cloud"\|"lan", host?}` or `{source:"manual", host, serial, accessCode}` | Saves the choice and starts the MQTT link. `access-code` waits up to 15 s for discovery; 404 if the printer is not found.                                      |
 | `POST disconnect` | —                                                                                                                                                                | Stops the link, forgets the printer choice                                                                                                                     |
+| `GET tasks`       | `?limit=1..20` (query)                                                                                                                                           | Recent prints of the selected printer from Bambu Cloud: `{tasks: [{id, title, cover, status, plateIndex, startTime, endTime, weightGrams, costTimeSeconds}]}`  |
+| `GET cover`       | `?id=<task id>` (query)                                                                                                                                          | The task's plate preview image, proxied (the signed CDN URL never reaches the browser). Only ids from this printer's own history are served.                   |
 | `POST logout`     | —                                                                                                                                                                | Stops the link and deletes the saved session                                                                                                                   |
 
 Bambu API calls used (community-documented, see `research.md`): `POST /v1/user-service/user/login`,
 `POST /v1/user-service/user/sendemail/code`, `POST bambulab.com/api/sign-in/tfa` (2FA),
-`GET /v1/design-user-service/my/preference` (MQTT user id), `GET /v1/iot-service/api/user/bind`.
+`GET /v1/design-user-service/my/preference` (MQTT user id), `GET /v1/iot-service/api/user/bind`,
+`GET /v1/user-service/my/tasks?deviceId=…` (print history + covers). `tasks`/`cover` need a Bambu
+account sign-in; with only a LAN access code they answer 401 and the display shows its placeholder.
 
 ## Stream (`GET /api/bridge/stream`, Server-Sent Events)
 

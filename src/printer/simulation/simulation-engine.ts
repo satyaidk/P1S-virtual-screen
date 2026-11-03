@@ -1,8 +1,11 @@
 import type { CommandResult, PrinterCommand } from "../commands";
 import { PRINT_ERROR_USER_CANCELLED, STAGE_LABELS } from "../protocol/mqtt-types";
 import { speedPreset } from "../state";
+import { MIN_EXTRUDE_C } from "../state";
 import type {
   ActiveFilament,
+  ControllableFan,
+  FanState,
   AmsState,
   AlertSeverity,
   PrinterAlert,
@@ -78,6 +81,12 @@ export class SimulationEngine {
   private bed: Temperature = { current: 0, target: 0 };
   private speedLevel: SpeedLevel = 2;
   private chamberLight = true;
+  /** Manual fan overrides (percent); null = firmware/G-code controls the fan. */
+  private fanOverride: Record<ControllableFan, number | null> = {
+    part: null,
+    aux: null,
+    chamber: null,
+  };
   private ams!: AmsState;
   private alerts: PrinterAlert[] = [];
   private printErrorCode = 0;
@@ -108,6 +117,7 @@ export class SimulationEngine {
     this.bed = { current: scenario.ambientC, target: 0 };
     this.speedLevel = 2;
     this.chamberLight = true;
+    this.fanOverride = { part: null, aux: null, chamber: null };
     this.ams = structuredClone({
       units: scenario.amsUnits,
       externalSpool: scenario.externalSpool,
@@ -270,6 +280,18 @@ export class SimulationEngine {
       case "set_chamber_light":
         this.chamberLight = command.on;
         return { ok: true };
+      case "set_fan":
+        this.fanOverride[command.fan] = command.percent;
+        return { ok: true };
+      case "move_axis":
+      case "home_axes":
+        if (this.status === "preparing" || this.status === "printing" || this.status === "paused")
+          return { ok: false, message: "Printer is busy" };
+        return { ok: true };
+      case "extrude":
+        if ((this.nozzle.current ?? 0) < MIN_EXTRUDE_C)
+          return { ok: false, message: "Nozzle too cold to extrude" };
+        return { ok: true };
       case "request_full_status":
         return { ok: true };
     }
@@ -354,6 +376,24 @@ export class SimulationEngine {
     ];
   }
 
+  /** What the sliced G-code would do with the fans, unless the user overrode them. */
+  private fans(): FanState {
+    const printing = this.status === "printing";
+    const auto: Record<ControllableFan, number> = {
+      part: printing ? 100 : 0,
+      aux: printing ? 30 : 0,
+      chamber: printing ? 50 : 0,
+    };
+    // Quantize like the real printer's 0..15 levels reported back in 10 % steps.
+    const q = (pct: number) => Math.round(Math.round((pct / 100) * 15) / 1.5) * 10;
+    return {
+      part: q(this.fanOverride.part ?? auto.part),
+      aux: q(this.fanOverride.aux ?? auto.aux),
+      chamber: q(this.fanOverride.chamber ?? auto.chamber),
+      heatbreak: (this.nozzle.current ?? 0) > 50 ? 100 : 0,
+    };
+  }
+
   /** Normalized state as the provider would publish it (without connection info). */
   snapshot(): Omit<PrinterState, "connection" | "source"> & { wifiSignalDbm: number | null } {
     const job = this.job;
@@ -389,6 +429,7 @@ export class SimulationEngine {
       bed: { current: round1(this.bed.current), target: this.bed.target },
       speedLevel: this.speedLevel,
       chamberLight: this.chamberLight,
+      fans: this.fans(),
       ams: structuredClone(this.ams),
       printErrorCode: this.printErrorCode,
       alerts: [...this.alerts],
