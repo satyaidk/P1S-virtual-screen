@@ -8,9 +8,28 @@ import type { HostedResult } from "./hosted-service";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 /**
+ * Extra hostnames this server answers to, from P1S_ALLOWED_HOSTS (comma-separated, exact match,
+ * case-insensitive), e.g. "home-pc.tailnet-name.ts.net,100.101.102.103" for Tailscale.
+ * Narrower than P1S_ALLOW_LAN_CLIENTS=1, which accepts any hostname.
+ */
+export function allowedHosts(env: string | undefined = process.env.P1S_ALLOWED_HOSTS): Set<string> {
+  return new Set(
+    (env ?? "")
+      .split(",")
+      .map((h) => h.trim().toLowerCase().replace(/:\d+$/, ""))
+      .filter(Boolean),
+  );
+}
+
+function hostnameOf(host: string): string {
+  return host.toLowerCase().replace(/:\d+$/, "");
+}
+
+/**
  * These routes control a physical printer and hold account credentials.
  * - Local (default): only requests addressed to this machine are answered (blocks other devices
- *   and DNS rebinding). Set P1S_ALLOW_LAN_CLIENTS=1 to use the console from another device.
+ *   and DNS rebinding). P1S_ALLOWED_HOSTS adds specific names (e.g. a Tailscale address);
+ *   P1S_ALLOW_LAN_CLIENTS=1 accepts any device on the network.
  * - Hosted (Vercel): public by nature; each visitor only reaches their own encrypted cookie
  *   session (see hosted-service.ts).
  * Both reject cross-origin requests so other websites cannot drive these endpoints.
@@ -18,21 +37,35 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 export function rejectForeignRequest(req: Request): Response | null {
   const url = new URL(req.url);
   const host = req.headers.get("host") ?? url.host;
+  const extra = allowedHosts();
   if (!isHosted()) {
-    const hostname = host.replace(/:\d+$/, "");
-    if (process.env.P1S_ALLOW_LAN_CLIENTS !== "1" && !LOCAL_HOSTS.has(hostname)) {
+    const hostname = hostnameOf(host);
+    if (
+      process.env.P1S_ALLOW_LAN_CLIENTS !== "1" &&
+      !LOCAL_HOSTS.has(hostname) &&
+      !extra.has(hostname)
+    ) {
       return json(
         {
-          error:
-            "This server only accepts requests to localhost (set P1S_ALLOW_LAN_CLIENTS=1 to allow LAN devices)",
+          error: `This server only accepts requests to localhost. To allow "${hostname}", add it to P1S_ALLOWED_HOSTS (or set P1S_ALLOW_LAN_CLIENTS=1 for any device on your network).`,
         },
         403,
       );
     }
   }
   const origin = req.headers.get("origin");
-  if (origin && new URL(origin).host !== host) {
-    return json({ error: "Cross-origin request rejected" }, 403);
+  if (origin) {
+    let originHost: string | null = null;
+    try {
+      originHost = new URL(origin).host;
+    } catch {
+      /* "null" or malformed origin: treat as foreign */
+    }
+    // A reverse proxy (e.g. `tailscale serve`) may forward to localhost while the browser's
+    // Origin is the proxy name: accept that only for explicitly allowed names.
+    const sameSite =
+      originHost !== null && (originHost === host || extra.has(hostnameOf(originHost)));
+    if (!sameSite) return json({ error: "Cross-origin request rejected" }, 403);
   }
   return null;
 }

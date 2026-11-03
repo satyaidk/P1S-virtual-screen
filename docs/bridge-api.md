@@ -128,11 +128,12 @@ requires the state change before it shows success. `pushall` is rate-limited to 
 
 ## Environment variables
 
-| Variable                   | Default   | Purpose                                           |
-| -------------------------- | --------- | ------------------------------------------------- |
-| `P1S_DATA_DIR`             | `./.data` | Where the session file lives                      |
-| `P1S_ALLOW_LAN_CLIENTS`    | unset     | `1` lets other devices on the network use the app |
-| `NEXT_PUBLIC_PRINTER_MODE` | unset     | `simulation` forces demo data (same as `?demo=1`) |
+| Variable                   | Default   | Purpose                                                        |
+| -------------------------- | --------- | -------------------------------------------------------------- |
+| `P1S_DATA_DIR`             | `./.data` | Where the session file lives                                   |
+| `P1S_ALLOW_LAN_CLIENTS`    | unset     | `1` lets other devices on the network use the app              |
+| `P1S_ALLOWED_HOSTS`        | unset     | Comma-separated exact hostnames also accepted (e.g. Tailscale) |
+| `NEXT_PUBLIC_PRINTER_MODE` | unset     | `simulation` forces demo data (same as `?demo=1`)              |
 
 ## Troubleshooting the job preview (3D cover)
 
