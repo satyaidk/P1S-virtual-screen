@@ -176,7 +176,7 @@ export class BambuCloudClient {
       if (typeof r.id !== "number" && typeof r.id !== "string") return [];
       // The endpoint filters by deviceId, but be defensive: never show another printer's job.
       if (typeof r.deviceId === "string" && r.deviceId !== serial) return [];
-      const cover = typeof r.cover === "string" && /^https:\/\//.test(r.cover) ? r.cover : null;
+      const cover = coverUrlOf(r);
       return [
         {
           id: String(r.id),
@@ -201,12 +201,20 @@ export class BambuCloudClient {
    * them directly: the server re-fetches through the task list and streams the bytes.
    */
   async fetchImage(url: string): Promise<{ body: ArrayBuffer; contentType: string }> {
-    if (!/^https:\/\//.test(url)) throw new CloudError("Refusing non-HTTPS image URL", 400);
+    if (!/^https?:\/\//i.test(url)) throw new CloudError("Refusing non-HTTP image URL", 400);
+    // No auth header: covers are pre-signed S3/CDN URLs and S3 rejects unexpected credentials.
     const res = await this.fetchImpl(url, { headers: { "user-agent": HEADERS["user-agent"] } });
     if (!res.ok) throw new CloudError(`Cover image unavailable (HTTP ${res.status})`, 502);
-    const contentType = res.headers.get("content-type") ?? "image/png";
-    if (!/^image\//.test(contentType)) throw new CloudError("Cover is not an image", 502);
-    return { body: await res.arrayBuffer(), contentType };
+    const body = await res.arrayBuffer();
+    // S3 often labels covers "binary/octet-stream": trust the bytes, not the header.
+    const contentType = sniffImageType(new Uint8Array(body)) ?? headerImageType(res);
+    if (!contentType) {
+      throw new CloudError(
+        `Cover is not an image (${res.headers.get("content-type") ?? "no content-type"})`,
+        502,
+      );
+    }
+    return { body, contentType };
   }
 
   private toLoginResult(body: unknown): LoginResult {
@@ -278,4 +286,40 @@ export function usernameFromJwt(token: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Where Bambu puts the plate preview. `cover` is the documented field (ha-bambulab,
+ * OpenBambuAPI); the others are fallbacks seen on some account types. Scheme-less "//host/…"
+ * URLs are upgraded to https.
+ */
+export function coverUrlOf(r: Record<string, unknown>): string | null {
+  for (const key of ["cover", "coverUrl", "thumbnail", "designCover"]) {
+    const v = r[key];
+    if (typeof v !== "string") continue;
+    const url = v.trim().startsWith("//") ? `https:${v.trim()}` : v.trim();
+    if (/^https?:\/\/[^\s]+$/i.test(url)) return url;
+  }
+  return null;
+}
+
+/** Identify PNG / JPEG / WebP / GIF by magic bytes. */
+export function sniffImageType(b: Uint8Array): string | null {
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47)
+    return "image/png";
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (
+    b.length >= 12 &&
+    String.fromCharCode(...b.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...b.slice(8, 12)) === "WEBP"
+  )
+    return "image/webp";
+  if (b.length >= 4 && String.fromCharCode(...b.slice(0, 4)) === "GIF8") return "image/gif";
+  return null;
+}
+
+function headerImageType(res: Response): string | null {
+  const type = res.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+  // SVG is excluded on purpose: it can carry script, and Bambu never uses it for covers.
+  return type && /^image\/(png|jpeg|webp|gif|avif)$/.test(type) ? type : null;
 }

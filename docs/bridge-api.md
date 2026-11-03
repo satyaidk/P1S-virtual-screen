@@ -133,3 +133,17 @@ requires the state change before it shows success. `pushall` is rate-limited to 
 | `P1S_DATA_DIR`             | `./.data` | Where the session file lives                      |
 | `P1S_ALLOW_LAN_CLIENTS`    | unset     | `1` lets other devices on the network use the app |
 | `NEXT_PUBLIC_PRINTER_MODE` | unset     | `simulation` forces demo data (same as `?demo=1`) |
+
+## Troubleshooting the job preview (3D cover)
+
+The preview comes from Bambu Cloud, in two steps. Check them in the same browser where you are
+signed in (the requests use your session cookie):
+
+1. `GET /api/bambu/tasks?limit=1` — the newest print. `cover` must be a path such as
+   `/api/bambu/cover?id=123`. `null` means Bambu has no cover for that print (SD-card/LAN-only
+   prints never have one); a 401 means you are not signed in to the Bambu account.
+2. Open that `cover` path. It returns the image, or JSON `{ "error": … }` saying why (for example
+   `Cover image unavailable (HTTP 403)`). Failures are also logged on the server as `[cover] task …`.
+
+The display retries on its own: it re-checks the task every 30 s for about 5 minutes after a print
+starts (covers can appear after the task), and retries a failed image download 3 times.
