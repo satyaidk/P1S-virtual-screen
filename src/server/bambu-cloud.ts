@@ -31,7 +31,10 @@ export interface CloudDevice {
  */
 export interface CloudTask {
   id: string;
+  /** Print profile / plate title (e.g. "Cardboard Spool"). */
   title: string;
+  /** MakerWorld model name (e.g. "FilaClip – The Only Filament Clip You Need"), if any. */
+  designTitle: string | null;
   /** Image URL (short-lived signed URL on Bambu's CDN). Server-side only. */
   coverUrl: string | null;
   /** Raw Bambu task status: 1 printing, 2 finished, 3 failed/cancelled (community-observed). */
@@ -178,6 +181,8 @@ export class BambuCloudClient {
         {
           id: String(r.id),
           title: typeof r.title === "string" ? r.title : "",
+          designTitle:
+            typeof r.designTitle === "string" && r.designTitle.trim() !== "" ? r.designTitle : null,
           coverUrl: cover,
           status: typeof r.status === "number" ? r.status : null,
           plateIndex: typeof r.plateIndex === "number" ? r.plateIndex : null,

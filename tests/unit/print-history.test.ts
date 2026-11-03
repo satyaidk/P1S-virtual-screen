@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { taskMatchesJob } from "@/hooks/usePrintHistory";
+import { formatRemaining } from "@/lib/format";
 import { BambuCloudClient } from "@/server/bambu-cloud";
 import { clearCoverCache, fetchCover, listPublicTasks } from "@/server/print-history";
 import { fakeFetch, jsonResponse } from "../support/fake-fetch";
@@ -9,7 +10,8 @@ const TASKS = {
   hits: [
     {
       id: 111,
-      title: "Benchy",
+      title: "Cardboard Spool",
+      designTitle: "FilaClip – The Only Filament Clip You Need",
       cover: "https://cdn.example/cover-111.png?sig=abc",
       status: 2,
       plateIndex: 1,
@@ -47,13 +49,15 @@ describe("print history", () => {
     expect(f.calls[0]!.headers.authorization).toBe("Bearer tok");
     expect(tasks.map((t) => t.id)).toEqual(["111", "333"]);
     expect(tasks[0]).toMatchObject({
-      title: "Benchy",
+      title: "Cardboard Spool",
+      designTitle: "FilaClip – The Only Filament Clip You Need",
       cover: "/api/bambu/cover?id=111",
       status: "finished",
       weightGrams: 12.4,
       costTimeSeconds: 3600,
     });
     expect(tasks[1]!.cover).toBeNull();
+    expect(tasks[1]!.designTitle).toBeNull();
     // The signed CDN URL never reaches the browser.
     expect(JSON.stringify(tasks)).not.toContain("cdn.example");
   });
@@ -93,5 +97,14 @@ describe("taskMatchesJob", () => {
   it("trusts the newest task when either side has no start time", () => {
     expect(taskMatchesJob({ startTime: null }, { startedAt: start })).toBe(true);
     expect(taskMatchesJob({ startTime: "2026-10-30T08:00:00Z" }, { startedAt: null })).toBe(true);
+  });
+});
+
+describe("formatRemaining", () => {
+  it("reads like Bambu Handy", () => {
+    expect(formatRemaining(15 * 60)).toBe("About 15min left");
+    expect(formatRemaining(65 * 60)).toBe("About 1h 05min left");
+    expect(formatRemaining(20)).toBe("Less than 1min left");
+    expect(formatRemaining(null)).toBe("--");
   });
 });
