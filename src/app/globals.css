@@ -156,3 +156,8 @@ body {
     var(--color-ink-800) 4px 8px
   );
 }
+
+/* Job preview tile: soft vertical gradient like Bambu Handy's job card. */
+.thumb-tile {
+  background: linear-gradient(180deg, var(--color-ink-600), var(--color-ink-800));
+}

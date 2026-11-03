@@ -10,6 +10,16 @@ export function formatDuration(totalSeconds: number | null): string {
   return `${s}s`;
 }
 
+/** Handy-style remaining time: "About 15min left", "About 1h 05min left". */
+export function formatRemaining(totalSeconds: number | null): string {
+  if (totalSeconds === null || !Number.isFinite(totalSeconds)) return "--";
+  const minutes = Math.max(0, Math.round(totalSeconds / 60));
+  if (minutes < 1) return "Less than 1min left";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `About ${h}h ${m.toString().padStart(2, "0")}min left` : `About ${m}min left`;
+}
+
 export function formatTemp(value: number | null): string {
   return value === null ? "--" : Math.round(value).toString();
 }

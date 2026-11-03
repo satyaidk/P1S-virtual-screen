@@ -32,6 +32,7 @@ export function toPublicTask(task: CloudTask): PublicTask {
   return {
     id: task.id,
     title: task.title,
+    designTitle: task.designTitle,
     cover: task.coverUrl ? `/api/bambu/cover?id=${encodeURIComponent(task.id)}` : null,
     status: (task.status !== null && TASK_STATUS[task.status]) || "unknown",
     plateIndex: task.plateIndex,

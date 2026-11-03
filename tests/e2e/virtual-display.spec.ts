@@ -84,6 +84,21 @@ test("simulated print: starts, heats, progresses and completes", async ({ page }
   await expect(display(page).getByTestId("job-progress")).toHaveText("100%");
 });
 
+test("home shows the job preview image like Bambu Handy", async ({ page }) => {
+  await openConsole(page);
+  await expect(display(page).getByTestId("job-cover-placeholder")).toBeVisible();
+  await page.getByTestId("scenario-select").selectOption("mid-print");
+  const cover = display(page).getByTestId("job-cover").locator("img");
+  await expect(cover).toBeVisible();
+  // The image actually decoded (not a broken-image box).
+  await expect
+    .poll(() => cover.evaluate((img) => (img as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
+  await expect(display(page).getByTestId("job-name")).toHaveText(/Cable Clip/);
+  await expect(display(page).getByTestId("job-detail")).toHaveText(/Plate 1 · Layer \d+\/96/);
+  await expect(display(page).getByTestId("job-remaining")).toHaveText(/^About \d+min left$/);
+});
+
 test("pause freezes progress and elapsed time; resume continues", async ({ page }) => {
   await openConsole(page);
   await page.getByTestId("scenario-select").selectOption("mid-print");

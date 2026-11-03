@@ -16,8 +16,15 @@ import {
 import { useDisplayStore } from "@/display/display-store";
 import { statusMeta, TONE_TEXT, type Tone } from "@/display/status-meta";
 import { usePrinter, useRuntime, useCommandValidation } from "@/hooks/usePrinter";
-import { useJobCover } from "@/hooks/usePrintHistory";
-import { formatAge, formatClock, formatDuration, formatTemp, prettyJobName } from "@/lib/format";
+import { useJobTask } from "@/hooks/usePrintHistory";
+import {
+  formatAge,
+  formatClock,
+  formatDuration,
+  formatRemaining,
+  formatTemp,
+  prettyJobName,
+} from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { deriveDisplayStatus, telemetryAgeMs } from "@/printer/state";
 import type {
@@ -83,7 +90,7 @@ export function MainScreen({ now }: { now: number }) {
       )}
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-1.5 px-2 pt-1.5 pb-2",
+          "flex min-h-0 flex-1 flex-col gap-1.5 px-1.5 pt-1.5 pb-1.5",
           stale && "opacity-60",
         )}
       >
@@ -157,8 +164,9 @@ function JobPanel({ display, now }: { display: DisplayStatus; now: number }) {
   const job = usePrinter((s) => s.state.job);
   const status = usePrinter((s) => s.state.status);
   const printErrorCode = usePrinter((s) => s.state.printErrorCode);
+  const ams = usePrinter((s) => s.state.ams);
   const live = usePrinter((s) => s.state.source === "live");
-  const cover = useJobCover({ live, name: job.name, startedAt: job.startedAt });
+  const task = useJobTask({ live, name: job.name, startedAt: job.startedAt });
   const meta = statusMeta(display, { printErrorCode });
   const printMeta = statusMeta(status, { printErrorCode });
 
@@ -168,59 +176,91 @@ function JobPanel({ display, now }: { display: DisplayStatus; now: number }) {
   const tone = PROGRESS_TONE[display] ?? "neutral";
   const done = status === "finished";
   const failed = status === "failed";
+  const paused = status === "paused";
   const remaining = job.remainingSeconds;
   const eta =
     remaining !== null && status === "printing" ? formatClock(now + remaining * 1000) : null;
+
+  // Same hierarchy as Bambu Handy: model name, then the print profile, then plate / layer.
+  const jobTitle = prettyJobName(job.name);
+  const title = task?.designTitle ?? (task?.title || jobTitle);
+  const filament = activeTray(ams).tray;
+  const subtitle =
+    task?.designTitle && task.title
+      ? task.title
+      : task && task.title !== jobTitle && job.name
+        ? jobTitle
+        : [filament?.material, filament && activeTray(ams).label].filter(Boolean).join(" · ") ||
+          null;
+  const plate = task?.plateIndex ? `Plate ${task.plateIndex}` : null;
   const layers =
     job.layer !== null && job.totalLayers ? `Layer ${job.layer}/${job.totalLayers}` : null;
-  const subline = done || failed ? printMeta.label : (job.stage ?? meta.label);
+  const detail = [plate, layers].filter(Boolean).join(" · ") || null;
+
+  const stageText = done || failed ? printMeta.label : (job.stage ?? meta.label);
   const ResultIcon: LucideIcon | null = done ? CircleCheck : failed ? CircleX : null;
+  const rightText = done
+    ? `Total ${formatDuration(job.elapsedSeconds)}`
+    : failed
+      ? "--"
+      : formatRemaining(remaining);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-1" data-testid="job-panel">
-      <div className="flex min-h-0 flex-1 gap-2">
-        <Thumbnail cover={cover} />
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-1 rounded-lg border border-ink-700 bg-ink-900 p-1.5"
+      data-testid="job-panel"
+    >
+      <div className="flex min-h-0 gap-2">
+        <Thumbnail cover={task?.cover ?? null} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className={cn("flex items-center gap-1 text-2xs font-semibold", TONE_TEXT[tone])}>
-            {ResultIcon ? (
-              <ResultIcon size={11} strokeWidth={2.5} aria-hidden />
-            ) : (
-              <StatusDot tone={tone} />
-            )}
-            <span className="truncate" data-testid="job-stage">
-              {subline}
-            </span>
-            {layers && <span className="ml-auto shrink-0 text-fg-dim tabular">{layers}</span>}
-          </div>
           <p
-            className="mt-0.5 line-clamp-2 text-[13px] leading-4 font-semibold break-all"
-            title={job.name ?? undefined}
+            className="truncate text-[13px] leading-4 font-bold"
+            title={task?.designTitle ?? job.name ?? undefined}
             data-testid="job-name"
           >
-            {prettyJobName(job.name)}
+            {title}
           </p>
-          <div className="mt-auto flex items-end justify-between">
-            <span className="text-[26px] leading-7 font-bold tabular" data-testid="job-progress">
+          {subtitle && (
+            <p className="truncate text-2xs leading-4 text-fg-muted" data-testid="job-subtitle">
+              {subtitle}
+            </p>
+          )}
+          {detail && (
+            <p
+              className="truncate text-2xs leading-4 text-fg-muted tabular"
+              data-testid="job-detail"
+            >
+              {detail}
+            </p>
+          )}
+          <div className="mt-auto flex items-end justify-between gap-1">
+            <span className="text-[24px] leading-6 font-bold tabular" data-testid="job-progress">
               {job.progress === null ? "--" : job.progress}
-              <span className="text-sm text-fg-muted">%</span>
+              <span className="text-xs font-semibold">%</span>
             </span>
-            <div className="text-right text-2xs leading-3 text-fg-muted tabular">
-              <div>{done ? "Total" : "Left"}</div>
-              <div className="text-xs font-semibold text-fg" data-testid="job-remaining">
-                {done
-                  ? formatDuration(job.elapsedSeconds)
-                  : failed
-                    ? "--"
-                    : formatDuration(remaining)}
-              </div>
-            </div>
+            <span
+              className="truncate pb-0.5 text-2xs font-semibold text-fg tabular"
+              data-testid="job-remaining"
+            >
+              {rightText}
+            </span>
           </div>
         </div>
       </div>
       <ProgressBar value={job.progress} tone={tone} />
-      <div className="flex justify-between text-2xs text-fg-muted tabular">
-        <span data-testid="job-elapsed">Elapsed {formatDuration(job.elapsedSeconds)}</span>
-        <span>{footerHint({ eta, done, failed, paused: status === "paused" })}</span>
+      <div className="flex items-center gap-1 text-2xs leading-3 text-fg-muted tabular">
+        {ResultIcon ? (
+          <ResultIcon size={10} strokeWidth={2.5} aria-hidden className={TONE_TEXT[tone]} />
+        ) : (
+          <StatusDot tone={tone} className="size-1.5" />
+        )}
+        <span className="min-w-0 flex-1 truncate" data-testid="job-stage">
+          {stageText}
+        </span>
+        <span className="shrink-0 text-fg-dim" data-testid="job-elapsed">
+          {formatDuration(job.elapsedSeconds)}
+        </span>
+        <span className="shrink-0 text-fg-dim">· {footerHint({ eta, done, failed, paused })}</span>
       </div>
     </div>
   );
@@ -237,10 +277,10 @@ function footerHint({
   failed: boolean;
   paused: boolean;
 }) {
-  if (done) return "Remove print from plate";
-  if (failed) return "Clear plate to restart";
-  if (paused) return "Paused · ETA on resume";
-  return eta ? `Done ≈ ${eta}` : "ETA not reported";
+  if (done) return "Remove print";
+  if (failed) return "Clear plate";
+  if (paused) return "Paused";
+  return eta ? `Done ${eta}` : "No ETA";
 }
 
 function IdlePanel({ unknown, now }: { unknown: boolean; now: number }) {
@@ -289,17 +329,17 @@ function Thumbnail({ empty = false, cover = null }: { empty?: boolean; cover?: s
   if (cover && failed !== cover) {
     return (
       <div
-        className="relative size-[64px] shrink-0 overflow-hidden rounded-md border border-ink-700 bg-ink-850"
+        className="thumb-tile relative size-[76px] shrink-0 overflow-hidden rounded-lg"
         data-testid="job-cover"
       >
         <Image
           src={cover}
           alt="Print preview"
           fill
-          sizes="64px"
+          sizes="76px"
           // Authenticated, per-user image proxied by our own API route: skip the optimizer.
           unoptimized
-          className="object-contain"
+          className="object-contain p-1"
           onError={() => setFailed(cover)}
         />
       </div>
@@ -307,11 +347,11 @@ function Thumbnail({ empty = false, cover = null }: { empty?: boolean; cover?: s
   }
   return (
     <div
-      className="flex size-[64px] shrink-0 flex-col items-center justify-center rounded-md border border-ink-700 bg-ink-850"
+      className="thumb-tile flex size-[76px] shrink-0 flex-col items-center justify-center rounded-lg"
       aria-hidden
+      data-testid="job-cover-placeholder"
     >
-      <Box size={26} strokeWidth={1.5} className={empty ? "text-fg-dim" : "text-fg-muted"} />
-      <span className="mt-1 h-0.5 w-10 rounded bg-ink-600" />
+      <Box size={30} strokeWidth={1.5} className={empty ? "text-fg-dim" : "text-fg-muted"} />
     </div>
   );
 }
@@ -335,7 +375,7 @@ function TempTile({
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className="touch flex h-[46px] flex-col justify-center rounded-md border border-ink-700 bg-ink-850 px-2 text-left"
+      className="touch flex h-[40px] flex-col justify-center rounded-md border border-ink-700 bg-ink-850 px-2 text-left"
     >
       <span className="flex items-center gap-1 text-2xs text-fg-muted">
         <Icon
@@ -364,7 +404,7 @@ function FilamentTile({ ams, onClick }: { ams: AmsState; onClick: () => void }) 
       type="button"
       onClick={onClick}
       data-testid="tile-filament"
-      className="touch flex h-[46px] flex-col justify-center rounded-md border border-ink-700 bg-ink-850 px-2 text-left"
+      className="touch flex h-[40px] flex-col justify-center rounded-md border border-ink-700 bg-ink-850 px-2 text-left"
     >
       <span className="text-2xs text-fg-muted">Filament {label}</span>
       <span className="flex items-center gap-1.5">
