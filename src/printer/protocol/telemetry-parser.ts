@@ -28,6 +28,7 @@ export interface TelemetryPatch {
   wifiSignalDbm?: number;
   nozzleDiameter?: string;
   chamberLight?: boolean;
+  fans?: Partial<Record<"part" | "aux" | "chamber" | "heatbreak", number>>;
   firmware?: string;
   hms?: { attr: number; code: number }[];
   ams?: AmsPatch;
@@ -103,6 +104,22 @@ export function normalizeTrayColor(raw: string): string | null {
   if (/^0{8}$/.test(raw)) return null;
   return `#${raw.slice(0, 6).toUpperCase()}`;
 }
+
+/**
+ * Bambu reports fan speeds as a 0..15 level ("0".."15"). Convert to percent, rounded to 10 % the
+ * same way Bambu Studio / Handy display it.
+ */
+export function fanLevelToPercent(level: number): number {
+  const clamped = Math.max(0, Math.min(15, level));
+  return Math.round((clamped / 15) * 10) * 10;
+}
+
+const FAN_FIELDS = {
+  cooling_fan_speed: "part",
+  big_fan1_speed: "aux",
+  big_fan2_speed: "chamber",
+  heatbreak_fan_speed: "heatbreak",
+} as const;
 
 /** "-45dBm" -> -45 */
 export function parseWifiSignal(raw: string): number | null {
@@ -186,6 +203,12 @@ function applyPrintField(
     case "spd_lvl":
       if ([1, 2, 3, 4].includes(v)) patch.speedLevel = v;
       else issues.push({ path: "print.spd_lvl", message: `unknown speed level ${String(v)}` });
+      break;
+    case "cooling_fan_speed":
+    case "big_fan1_speed":
+    case "big_fan2_speed":
+    case "heatbreak_fan_speed":
+      patch.fans = { ...patch.fans, [FAN_FIELDS[name]]: fanLevelToPercent(v) };
       break;
     case "print_error":
       patch.printErrorCode = v;

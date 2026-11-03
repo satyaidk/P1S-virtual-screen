@@ -3,7 +3,7 @@
  * tabs are root screens, sub-screens push onto a stack and have a back button.
  */
 export type TabId = "home" | "temperature" | "ams" | "control" | "menu";
-export type SubScreenId = "info" | "settings" | "notifications";
+export type SubScreenId = "info" | "settings" | "notifications" | "fans" | "move" | "history";
 export type ScreenId = TabId | SubScreenId;
 
 export const TABS: readonly { id: TabId; label: string }[] = [
@@ -18,6 +18,9 @@ export const SUB_SCREENS: Readonly<Record<SubScreenId, { title: string; parent: 
   info: { title: "Printer info", parent: "menu" },
   settings: { title: "Settings", parent: "menu" },
   notifications: { title: "Notifications", parent: "menu" },
+  fans: { title: "Fans", parent: "control" },
+  move: { title: "Move axes", parent: "control" },
+  history: { title: "Print history", parent: "menu" },
 };
 
 export interface NavState {

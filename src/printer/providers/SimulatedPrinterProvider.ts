@@ -63,6 +63,10 @@ const SIM_COMMANDS: ReadonlySet<CommandType> = new Set<CommandType>([
   "set_nozzle_target",
   "set_bed_target",
   "set_chamber_light",
+  "set_fan",
+  "move_axis",
+  "home_axes",
+  "extrude",
   "request_full_status",
   "start_sample_job",
 ]);

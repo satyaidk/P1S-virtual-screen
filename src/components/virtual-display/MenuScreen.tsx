@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Info, Moon, Settings, type LucideIcon } from "lucide-react";
+import { Bell, History, Info, Moon, Settings, type LucideIcon } from "lucide-react";
 import { useDisplayStore } from "@/display/display-store";
 import { usePrinter } from "@/hooks/usePrinter";
 
@@ -26,13 +26,14 @@ export function MenuScreen() {
       badge: alerts + failures,
       onClick: () => go("notifications"),
     },
+    { id: "history", label: "History", icon: History, onClick: () => go("history") },
     { id: "info", label: "Printer info", icon: Info, onClick: () => go("info") },
     { id: "settings", label: "Settings", icon: Settings, onClick: () => go("settings") },
     { id: "sleep", label: "Screen off", icon: Moon, onClick: sleep },
   ];
 
   return (
-    <div className="grid h-full grid-cols-2 grid-rows-2 gap-1.5 p-2">
+    <div className="grid h-full grid-cols-3 grid-rows-2 gap-1.5 p-2">
       {items.map((item) => (
         <button
           key={item.id}

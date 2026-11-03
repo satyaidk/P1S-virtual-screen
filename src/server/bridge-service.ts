@@ -21,6 +21,7 @@ import {
   type PrinterTarget,
   type StoredState,
 } from "./session-store";
+import { NO_CLOUD_HISTORY, type CloudContext } from "./print-history";
 
 /**
  * Server-side composition: cloud sign-in, printer selection and the MQTT link.
@@ -298,6 +299,18 @@ export class BridgeService {
     if (target?.mode !== "lan" || target.serial !== found.serial) return;
     if (target.hostSource !== "auto" || target.host === found.host) return;
     await this.setPrinter({ ...target, host: found.host });
+  }
+
+  /**
+   * Token + current printer for print history / cover requests. Works in LAN mode too, as long as
+   * the user also signed in to the Bambu account (the access code alone gives no cloud access).
+   */
+  cloudContext(): CloudContext {
+    const cloud = this.stored.cloud;
+    if (!cloud) throw new CloudError(NO_CLOUD_HISTORY, 401);
+    const serial = this.stored.printer?.serial;
+    if (!serial) throw new CloudError("Connect a printer first", 400);
+    return { client: this.cloud(cloud.region), token: cloud.token, serial };
   }
 
   private cloud(region: CloudRegion): BambuCloudClient {

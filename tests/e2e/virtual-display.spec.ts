@@ -230,7 +230,7 @@ test("every navigation control works", async ({ page }) => {
     await display(page).getByTestId(`tab-${tab}`).click();
     await expect(display(page)).toHaveAttribute("data-screen", tab);
   }
-  for (const item of ["info", "settings", "notifications"]) {
+  for (const item of ["info", "settings", "notifications", "history"]) {
     await display(page).getByTestId("tab-menu").click();
     await display(page).getByTestId(`menu-${item}`).click();
     await expect(display(page)).toHaveAttribute("data-screen", item);
@@ -243,6 +243,65 @@ test("every navigation control works", async ({ page }) => {
   await display(page).getByTestId("tab-home").click();
   await display(page).getByTestId("tile-nozzle").click();
   await expect(display(page)).toHaveAttribute("data-screen", "temperature");
+});
+
+test("P2S-style fan control: draft, apply, and reported speed", async ({ page }) => {
+  await openConsole(page);
+  await page.getByTestId("scenario-select").selectOption("mid-print");
+  await display(page).getByTestId("tab-control").click();
+  await display(page).getByTestId("open-fans").click();
+  await expect(display(page)).toHaveAttribute("data-screen", "fans");
+  await expect(display(page).getByTestId("fan-part-value")).toHaveText("100%");
+
+  await display(page).getByTestId("fan-part-minus").click();
+  await display(page).getByTestId("fan-part-minus").click();
+  await expect(display(page).getByTestId("fan-part-value")).toHaveText("80%");
+  await display(page).getByTestId("fan-part-apply").click();
+  await expect(display(page).getByTestId("fan-part-value")).toHaveText("80%");
+  await expect(display(page).getByTestId("fan-part-apply")).toBeDisabled();
+
+  await display(page).getByRole("button", { name: "Back" }).click();
+  await expect(display(page)).toHaveAttribute("data-screen", "control");
+  await expect(display(page).getByTestId("open-fans")).toHaveText("80%");
+});
+
+test("move screen locks axes while printing and unlocks when idle", async ({ page }) => {
+  await openConsole(page);
+  await page.getByTestId("scenario-select").selectOption("mid-print");
+  await display(page).getByTestId("tab-control").click();
+  await display(page).getByTestId("open-move").click();
+  await expect(display(page)).toHaveAttribute("data-screen", "move");
+  await expect(display(page).getByTestId("home-axes")).toBeDisabled();
+  await expect(display(page).getByTestId("move-hint")).toHaveText("Axes are locked while printing");
+
+  await page.getByTestId("scenario-select").selectOption("standard");
+  await expect(display(page).getByTestId("home-axes")).toBeEnabled();
+  // Cold nozzle: the extruder stays locked with an explanation.
+  await expect(display(page).getByTestId("extrude")).toBeDisabled();
+  await expect(display(page).getByTestId("move-hint")).toHaveText(/Heat the nozzle/);
+  await display(page).getByTestId("step-1").click();
+  await display(page).getByTestId("jog-xplus").click();
+  await expect(display(page).getByTestId("command-feedback")).toBeVisible();
+});
+
+test("new sub-screens fit the 320x240 canvas", async ({ page }) => {
+  await openConsole(page);
+  await page.getByTestId("scenario-select").selectOption("mid-print");
+  for (const [open, screenId] of [
+    [["tab-control", "open-fans"], "fans"],
+    [["tab-control", "open-move"], "move"],
+    [["tab-menu", "menu-history"], "history"],
+  ] as const) {
+    for (const id of open) await display(page).getByTestId(id).click();
+    await expect(display(page)).toHaveAttribute("data-screen", screenId);
+    const overflow = await screen(page).evaluate((el) => {
+      const inner = el.firstElementChild as HTMLElement;
+      return { scroll: inner.scrollHeight, client: inner.clientHeight };
+    });
+    expect(overflow.scroll, screenId).toBeLessThanOrEqual(overflow.client);
+  }
+  // Demo mode has no Bambu Cloud: history explains instead of failing.
+  await expect(display(page).getByTestId("history-empty")).toContainText("Bambu Cloud");
 });
 
 test("settings simulate brightness, rotation, theme and sleep", async ({ page }) => {
