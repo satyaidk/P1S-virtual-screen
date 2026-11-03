@@ -80,15 +80,34 @@ export function useJobTask(job: {
   name: string | null;
   startedAt: number | null;
 }): PublicTask | null {
-  const key = job.live && job.name ? `${job.name}|${job.startedAt ?? ""}` : null;
-  const history = useLatestTasks(key);
+  const jobKey = job.live && job.name ? `${job.name}|${job.startedAt ?? ""}` : null;
+  // Bambu creates the task when the print is sent; its cover can arrive a little later. Keep
+  // asking (every 30 s, ~5 min) while the matched task has no cover or nothing matched yet.
+  const [attempt, setAttempt] = useState({ jobKey, n: 0 });
+  const n = attempt.jobKey === jobKey ? attempt.n : 0;
+  const history = useLatestTasks(jobKey === null ? null : `${jobKey}|${n}`);
+
+  let task: PublicTask | null = null;
+  if (history.status === "ready") {
+    const latest = history.tasks[0];
+    if (latest && taskMatchesJob(latest, job)) task = latest;
+  }
+  const settled = history.status === "ready" || history.status === "error";
+  const shouldRetry = jobKey !== null && settled && !task?.cover && n < COVER_RETRIES;
+
+  useEffect(() => {
+    if (!shouldRetry) return;
+    const t = setTimeout(() => setAttempt({ jobKey, n: n + 1 }), COVER_RETRY_MS);
+    return () => clearTimeout(t);
+  }, [shouldRetry, jobKey, n]);
+
   // Demo mode has no cloud: show a bundled, clearly simulated preview so the layout is visible.
   if (!job.live) return job.name ? DEMO_TASK : null;
-  if (history.status !== "ready") return null;
-  const latest = history.tasks[0];
-  if (!latest) return null;
-  return taskMatchesJob(latest, job) ? latest : null;
+  return task;
 }
+
+export const COVER_RETRY_MS = 30_000;
+export const COVER_RETRIES = 10;
 
 /** Simulator-only task (the SIM badge is shown); never used for a real printer. */
 export const DEMO_TASK: PublicTask = {
