@@ -28,13 +28,14 @@ export function InfoScreen({ now }: { now: number }) {
       connection.wifiSignalDbm === null ? "Not reported" : `${connection.wifiSignalDbm} dBm`,
     ],
     ["Last update", formatAge(telemetryAgeMs(state, now))],
+    ["App build", process.env.NEXT_PUBLIC_BUILD_COMMIT ?? "unknown"],
   ];
 
   return (
     <div className="flex h-full flex-col">
       <SubHeader title="Printer info" onBack={back} />
       <dl
-        className="grid flex-1 grid-cols-[88px_1fr] content-start gap-x-2 px-3 py-1.5 text-2xs leading-[14px]"
+        className="grid min-h-0 flex-1 grid-cols-[88px_1fr] content-start overflow-y-auto gap-x-2 px-3 py-1.5 text-2xs leading-[14px]"
         data-testid="info-list"
       >
         {rows.map(([label, value]) => (

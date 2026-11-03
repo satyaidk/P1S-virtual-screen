@@ -31,6 +31,14 @@ export function DevelopmentConsole({ demo = false }: { demo?: boolean }) {
             <img src="/icon.svg" alt="" width={26} height={26} />
             <span className="text-[15px] font-semibold">P1S Virtual Screen</span>
           </a>
+          <a
+            href="/api/version"
+            title="Commit this build was made from"
+            className="rounded border border-line px-1.5 font-mono text-[11px] text-fg-muted hover:text-fg"
+            data-testid="build-commit"
+          >
+            build {process.env.NEXT_PUBLIC_BUILD_COMMIT ?? "unknown"}
+          </a>
           <nav aria-label="Data source" className="flex rounded-md border border-line p-0.5">
             <SourceLink href="/" active={!simulated} testId="source-live">
               My printer
