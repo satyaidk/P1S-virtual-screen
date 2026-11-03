@@ -4,7 +4,10 @@
  */
 export interface PublicTask {
   id: string;
+  /** Print profile / plate title as Bambu stores it (e.g. "Cardboard Spool"). */
   title: string;
+  /** MakerWorld model name, when the print came from a MakerWorld design. */
+  designTitle: string | null;
   /** Same-origin URL of the cover (sliced plate preview), or null when the task has none. */
   cover: string | null;
   status: "printing" | "finished" | "failed" | "unknown";

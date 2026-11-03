@@ -70,22 +70,43 @@ export function usePrintHistory(key: string | null, limit = 10): HistoryState {
 }
 
 /**
- * Cover image of the job on the printer. The printer itself never sends it (P1 firmware), so it
- * comes from the newest Bambu Cloud task of this printer — the same source Handy uses.
+ * The Bambu Cloud task of the job on the printer: its cover (3D plate preview), model name and
+ * profile name. The printer itself never sends these (P1 firmware), so they come from the newest
+ * cloud task of this printer — the same source Handy uses.
  * Returns null while loading, when unavailable, or when the newest task is a different print.
  */
-export function useJobCover(job: {
+export function useJobTask(job: {
   live: boolean;
   name: string | null;
   startedAt: number | null;
-}): string | null {
+}): PublicTask | null {
   const key = job.live && job.name ? `${job.name}|${job.startedAt ?? ""}` : null;
-  // A few entries, not 1: the server drops other printers' tasks if Bambu ignores deviceId.
-  const history = usePrintHistory(key, 5);
+  const history = useLatestTasks(key);
+  // Demo mode has no cloud: show a bundled, clearly simulated preview so the layout is visible.
+  if (!job.live) return job.name ? DEMO_TASK : null;
   if (history.status !== "ready") return null;
   const latest = history.tasks[0];
-  if (!latest?.cover) return null;
-  return taskMatchesJob(latest, job) ? latest.cover : null;
+  if (!latest) return null;
+  return taskMatchesJob(latest, job) ? latest : null;
+}
+
+/** Simulator-only task (the SIM badge is shown); never used for a real printer. */
+export const DEMO_TASK: PublicTask = {
+  id: "demo",
+  title: "PLA · 0.2 mm layers",
+  designTitle: "Cable Clip x8 – Desk Organizer",
+  cover: "/demo-cover.svg",
+  status: "printing",
+  plateIndex: 1,
+  startTime: null,
+  endTime: null,
+  weightGrams: null,
+  costTimeSeconds: null,
+};
+
+function useLatestTasks(key: string | null): HistoryState {
+  // A few entries, not 1: the server drops other printers' tasks if Bambu ignores deviceId.
+  return usePrintHistory(key, 5);
 }
 
 /**

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- Simulator-only plate preview: an isometric cable clip, shaded like a slicer render. -->
+  <g stroke="#5f9aa3" stroke-width="1" stroke-linejoin="round">
+    <polygon points="30,52 70,32 90,42 50,62" fill="#bfe6ec"/>
+    <polygon points="30,52 50,62 50,88 30,78" fill="#8fc4cc"/>
+    <polygon points="50,62 90,42 90,68 50,88" fill="#a6d6dd"/>
+    <polygon points="42,52 70,38 80,43 52,57" fill="#7fb3bb"/>
+    <polygon points="22,60 34,54 34,70 22,76" fill="#8fc4cc"/>
+    <polygon points="22,60 34,54 38,56 26,62" fill="#bfe6ec"/>
+  </g>
+</svg>
