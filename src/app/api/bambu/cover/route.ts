@@ -5,7 +5,7 @@ import { fetchCover } from "@/server/print-history";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TASK_ID = /^\d{1,20}$/;
+const TASK_ID = /^[A-Za-z0-9_-]{1,40}$/;
 
 /** The cover image (sliced plate preview) of one print task, proxied from Bambu's CDN. */
 export async function GET(req: Request) {
@@ -24,6 +24,8 @@ export async function GET(req: Request) {
       },
     });
   } catch (error) {
+    // Visible in the deployment's function logs; the URL is never logged (it is signed).
+    console.warn("[cover] task %s: %s", id, error instanceof Error ? error.message : error);
     return errorResponse(error);
   }
 }

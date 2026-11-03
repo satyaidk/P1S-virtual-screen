@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
   Box,
@@ -185,16 +185,20 @@ function JobPanel({ display, now }: { display: DisplayStatus; now: number }) {
   const jobTitle = prettyJobName(job.name);
   const title = task?.designTitle ?? (task?.title || jobTitle);
   const filament = activeTray(ams).tray;
+  const filamentLine =
+    [filament?.material, filament && activeTray(ams).label].filter(Boolean).join(" · ") || null;
+  // Second line: the profile name, unless it just repeats the title (then the filament).
   const subtitle =
-    task?.designTitle && task.title
-      ? task.title
-      : task && task.title !== jobTitle && job.name
-        ? jobTitle
-        : [filament?.material, filament && activeTray(ams).label].filter(Boolean).join(" · ") ||
-          null;
+    [task?.designTitle ? task.title : null, job.name ? jobTitle : null, filamentLine].find(
+      (c): c is string => !!c && !sameText(c, title),
+    ) ?? null;
   const plate = task?.plateIndex ? `Plate ${task.plateIndex}` : null;
-  const layers =
-    job.layer !== null && job.totalLayers ? `Layer ${job.layer}/${job.totalLayers}` : null;
+  // While preparing, nothing of this job is printed yet: the printer may still report the
+  // previous job's 100 % / last layer / 0 min until the first layer starts (Handy shows 0 %).
+  const preparing = status === "preparing";
+  const progress = preparing ? 0 : job.progress;
+  const layer = preparing && job.totalLayers ? 0 : job.layer;
+  const layers = layer !== null && job.totalLayers ? `Layer ${layer}/${job.totalLayers}` : null;
   const detail = [plate, layers].filter(Boolean).join(" · ") || null;
 
   const stageText = done || failed ? printMeta.label : (job.stage ?? meta.label);
@@ -203,7 +207,9 @@ function JobPanel({ display, now }: { display: DisplayStatus; now: number }) {
     ? `Total ${formatDuration(job.elapsedSeconds)}`
     : failed
       ? "--"
-      : formatRemaining(remaining);
+      : preparing && (remaining === null || remaining <= 0)
+        ? "--"
+        : formatRemaining(remaining);
 
   return (
     <div
@@ -235,7 +241,7 @@ function JobPanel({ display, now }: { display: DisplayStatus; now: number }) {
           )}
           <div className="mt-auto flex items-end justify-between gap-1">
             <span className="text-[24px] leading-6 font-bold tabular" data-testid="job-progress">
-              {job.progress === null ? "--" : job.progress}
+              {progress === null ? "--" : progress}
               <span className="text-xs font-semibold">%</span>
             </span>
             <span
@@ -247,7 +253,7 @@ function JobPanel({ display, now }: { display: DisplayStatus; now: number }) {
           </div>
         </div>
       </div>
-      <ProgressBar value={job.progress} tone={tone} />
+      <ProgressBar value={progress} tone={tone} />
       <div className="flex items-center gap-1 text-2xs leading-3 text-fg-muted tabular">
         {ResultIcon ? (
           <ResultIcon size={10} strokeWidth={2.5} aria-hidden className={TONE_TEXT[tone]} />
@@ -264,6 +270,12 @@ function JobPanel({ display, now }: { display: DisplayStatus; now: number }) {
       </div>
     </div>
   );
+}
+
+/** Equal ignoring case, spacing and punctuation ("Hello  Kitty!" == "hello kitty"). */
+function sameText(a: string, b: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+  return norm(a) === norm(b) || norm(a).startsWith(norm(b)) || norm(b).startsWith(norm(a));
 }
 
 function footerHint({
@@ -324,23 +336,38 @@ function IdlePanel({ unknown, now }: { unknown: boolean; now: number }) {
  * Cloud print task (see useJobCover). Falls back to the placeholder when there is no cover (demo
  * mode, SD-card/LAN-only prints, not signed in) or the image fails to load.
  */
+const IMAGE_RETRIES = 3;
+const IMAGE_RETRY_MS = 20_000;
+
 function Thumbnail({ empty = false, cover = null }: { empty?: boolean; cover?: string | null }) {
-  const [failed, setFailed] = useState<string | null>(null);
-  if (cover && failed !== cover) {
+  // A failed load is retried a few times (cache-busted): a just-started print's cover may not
+  // be downloadable yet, and Bambu's CDN occasionally errors.
+  const [failure, setFailure] = useState<{ cover: string; count: number } | null>(null);
+  const failures = failure?.cover === cover ? failure.count : 0;
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!cover || failures === 0 || failures > IMAGE_RETRIES) return;
+    const t = setTimeout(() => setRetry((r) => r + 1), IMAGE_RETRY_MS);
+    return () => clearTimeout(t);
+  }, [cover, failures]);
+
+  if (cover && failures <= IMAGE_RETRIES && !(failures > 0 && retry < failures)) {
+    const src = failures > 0 ? `${cover}${cover.includes("?") ? "&" : "?"}r=${failures}` : cover;
     return (
       <div
         className="thumb-tile relative size-[76px] shrink-0 overflow-hidden rounded-lg"
         data-testid="job-cover"
       >
         <Image
-          src={cover}
+          key={src}
+          src={src}
           alt="Print preview"
           fill
           sizes="76px"
           // Authenticated, per-user image proxied by our own API route: skip the optimizer.
           unoptimized
           className="object-contain p-1"
-          onError={() => setFailed(cover)}
+          onError={() => setFailure({ cover, count: failures + 1 })}
         />
       </div>
     );
