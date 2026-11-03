@@ -167,6 +167,18 @@ function HostedNotice({ setupError }: { setupError: string | null }) {
         access code only works from a computer on the printer&apos;s Wi-Fi (run{" "}
         <code className="font-mono">npm run dev</code> there for controls).
       </p>
+      <p className="leading-5 text-fg-muted" data-testid="remote-control-hint">
+        <strong className="text-fg">Control from anywhere:</strong> run this app on a computer at
+        home and reach it from your phone over Tailscale.{" "}
+        <a
+          href="https://github.com/satyaidk/P1S-virtual-screen/blob/main/docs/remote-access.md"
+          target="_blank"
+          rel="noreferrer"
+          className="text-fg underline underline-offset-2"
+        >
+          Step-by-step guide
+        </a>
+      </p>
     </div>
   );
 }

@@ -8,6 +8,10 @@ import { expect, test } from "@playwright/test";
 test("shows Bambu sign-in instead of the access-code card", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("hosted-notice")).toContainText("view-only");
+  await expect(page.getByTestId("remote-control-hint").getByRole("link")).toHaveAttribute(
+    "href",
+    /docs\/remote-access\.md$/,
+  );
   await expect(page.getByTestId("hosted-sign-in")).toBeVisible();
   await expect(page.getByTestId("sign-in")).toBeVisible();
   await expect(page.getByTestId("my-printer")).toHaveCount(0);
