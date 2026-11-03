@@ -23,6 +23,7 @@ import {
 } from "./cookie-session";
 import { PrinterLink, type MqttConnect } from "./printer-link";
 import { myPrinter, type MyPrinter } from "./printer-config";
+import { NO_CLOUD_HISTORY, type CloudContext } from "./print-history";
 import { maskAccount, maskSerial } from "./session-store";
 
 /**
@@ -246,6 +247,19 @@ export class HostedService {
     );
     link.subscribe(send);
     return link;
+  }
+
+  /** Token + selected printer for print history / cover requests. */
+  cloudContext(req: Request): CloudContext {
+    const key = this.requireKey();
+    const session = readSession(req, key);
+    if (!session) throw new CloudError(NO_CLOUD_HISTORY, 401);
+    if (!session.printer) throw new CloudError("Choose a printer first", 400);
+    return {
+      client: this.cloud(session.region),
+      token: session.token,
+      serial: session.printer.serial,
+    };
   }
 
   // --- internals -------------------------------------------------------------------------

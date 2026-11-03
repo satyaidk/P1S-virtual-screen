@@ -23,6 +23,27 @@ export interface CloudDevice {
   accessCode: string | null;
 }
 
+/**
+ * One entry of the account's print history (`/v1/user-service/my/tasks`). Every print started
+ * through Bambu Cloud (Handy, Bambu Studio "send to cloud", MakerWorld) creates one. The `cover`
+ * is the sliced plate preview — the image the printer's own screen shows. Prints started from
+ * the SD card or over LAN-only do not appear here.
+ */
+export interface CloudTask {
+  id: string;
+  title: string;
+  /** Image URL (short-lived signed URL on Bambu's CDN). Server-side only. */
+  coverUrl: string | null;
+  /** Raw Bambu task status: 1 printing, 2 finished, 3 failed/cancelled (community-observed). */
+  status: number | null;
+  plateIndex: number | null;
+  startTime: string | null;
+  endTime: string | null;
+  weightGrams: number | null;
+  costTimeSeconds: number | null;
+  deviceId: string | null;
+}
+
 export type LoginResult =
   | { kind: "token"; token: string; expiresIn: number | null }
   | { kind: "verifyCode" }
@@ -137,6 +158,50 @@ export class BambuCloudClient {
         },
       ];
     });
+  }
+
+  /** Most recent print tasks for one printer, newest first. */
+  async listTasks(token: string, serial: string, limit = 10): Promise<CloudTask[]> {
+    const qs = new URLSearchParams({ deviceId: serial, limit: String(limit) });
+    const body = (await this.get(`/v1/user-service/my/tasks?${qs.toString()}`, token)) as {
+      hits?: unknown;
+    };
+    const hits = Array.isArray(body.hits) ? body.hits : [];
+    return hits.flatMap((h): CloudTask[] => {
+      if (typeof h !== "object" || h === null) return [];
+      const r = h as Record<string, unknown>;
+      if (typeof r.id !== "number" && typeof r.id !== "string") return [];
+      // The endpoint filters by deviceId, but be defensive: never show another printer's job.
+      if (typeof r.deviceId === "string" && r.deviceId !== serial) return [];
+      const cover = typeof r.cover === "string" && /^https:\/\//.test(r.cover) ? r.cover : null;
+      return [
+        {
+          id: String(r.id),
+          title: typeof r.title === "string" ? r.title : "",
+          coverUrl: cover,
+          status: typeof r.status === "number" ? r.status : null,
+          plateIndex: typeof r.plateIndex === "number" ? r.plateIndex : null,
+          startTime: typeof r.startTime === "string" ? r.startTime : null,
+          endTime: typeof r.endTime === "string" ? r.endTime : null,
+          weightGrams: typeof r.weight === "number" ? r.weight : null,
+          costTimeSeconds: typeof r.costTime === "number" ? r.costTime : null,
+          deviceId: typeof r.deviceId === "string" ? r.deviceId : null,
+        },
+      ];
+    });
+  }
+
+  /**
+   * Download a cover image. Covers are signed CDN URLs that expire, so the browser never gets
+   * them directly: the server re-fetches through the task list and streams the bytes.
+   */
+  async fetchImage(url: string): Promise<{ body: ArrayBuffer; contentType: string }> {
+    if (!/^https:\/\//.test(url)) throw new CloudError("Refusing non-HTTPS image URL", 400);
+    const res = await this.fetchImpl(url, { headers: { "user-agent": HEADERS["user-agent"] } });
+    if (!res.ok) throw new CloudError(`Cover image unavailable (HTTP ${res.status})`, 502);
+    const contentType = res.headers.get("content-type") ?? "image/png";
+    if (!/^image\//.test(contentType)) throw new CloudError("Cover is not an image", 502);
+    return { body: await res.arrayBuffer(), contentType };
   }
 
   private toLoginResult(body: unknown): LoginResult {

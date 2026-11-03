@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import Image from "next/image";
 import {
   Box,
   CircleCheck,
@@ -14,6 +16,7 @@ import {
 import { useDisplayStore } from "@/display/display-store";
 import { statusMeta, TONE_TEXT, type Tone } from "@/display/status-meta";
 import { usePrinter, useRuntime, useCommandValidation } from "@/hooks/usePrinter";
+import { useJobCover } from "@/hooks/usePrintHistory";
 import { formatAge, formatClock, formatDuration, formatTemp, prettyJobName } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { deriveDisplayStatus, telemetryAgeMs } from "@/printer/state";
@@ -154,6 +157,8 @@ function JobPanel({ display, now }: { display: DisplayStatus; now: number }) {
   const job = usePrinter((s) => s.state.job);
   const status = usePrinter((s) => s.state.status);
   const printErrorCode = usePrinter((s) => s.state.printErrorCode);
+  const live = usePrinter((s) => s.state.source === "live");
+  const cover = useJobCover({ live, name: job.name, startedAt: job.startedAt });
   const meta = statusMeta(display, { printErrorCode });
   const printMeta = statusMeta(status, { printErrorCode });
 
@@ -174,7 +179,7 @@ function JobPanel({ display, now }: { display: DisplayStatus; now: number }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1" data-testid="job-panel">
       <div className="flex min-h-0 flex-1 gap-2">
-        <Thumbnail />
+        <Thumbnail cover={cover} />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className={cn("flex items-center gap-1 text-2xs font-semibold", TONE_TEXT[tone])}>
             {ResultIcon ? (
@@ -275,10 +280,31 @@ function IdlePanel({ unknown, now }: { unknown: boolean; now: number }) {
 }
 
 /**
- * Designed placeholder. The P1S does not publish job thumbnails over MQTT (they live in the
- * .3mf on the SD card / cloud), so no image is fetched in this phase.
+ * Job preview. The P1S does not publish thumbnails over MQTT, so `cover` comes from the Bambu
+ * Cloud print task (see useJobCover). Falls back to the placeholder when there is no cover (demo
+ * mode, SD-card/LAN-only prints, not signed in) or the image fails to load.
  */
-function Thumbnail({ empty = false }: { empty?: boolean }) {
+function Thumbnail({ empty = false, cover = null }: { empty?: boolean; cover?: string | null }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (cover && failed !== cover) {
+    return (
+      <div
+        className="relative size-[64px] shrink-0 overflow-hidden rounded-md border border-ink-700 bg-ink-850"
+        data-testid="job-cover"
+      >
+        <Image
+          src={cover}
+          alt="Print preview"
+          fill
+          sizes="64px"
+          // Authenticated, per-user image proxied by our own API route: skip the optimizer.
+          unoptimized
+          className="object-contain"
+          onError={() => setFailed(cover)}
+        />
+      </div>
+    );
+  }
   return (
     <div
       className="flex size-[64px] shrink-0 flex-col items-center justify-center rounded-md border border-ink-700 bg-ink-850"

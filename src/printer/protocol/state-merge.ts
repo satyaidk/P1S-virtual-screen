@@ -268,6 +268,14 @@ export function mergeTelemetry(
         : prev.bed,
     speedLevel: pick(patch.speedLevel, prev.speedLevel),
     chamberLight: pick(patch.chamberLight, prev.chamberLight),
+    fans: patch.fans
+      ? {
+          part: pick(patch.fans.part, prev.fans.part),
+          aux: pick(patch.fans.aux, prev.fans.aux),
+          chamber: pick(patch.fans.chamber, prev.fans.chamber),
+          heatbreak: pick(patch.fans.heatbreak, prev.fans.heatbreak),
+        }
+      : prev.fans,
     ams,
     printErrorCode: pick(patch.printErrorCode, prev.printErrorCode),
     alerts:

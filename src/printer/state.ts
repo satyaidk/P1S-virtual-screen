@@ -22,6 +22,15 @@ export const SPEED_PRESETS: readonly SpeedPreset[] = [
   { level: 4, label: "Ludicrous", shortLabel: "Ludi", percent: 166 },
 ];
 
+/** Fan presets offered on the fan screen (percent). */
+export const FAN_PRESETS: readonly number[] = [0, 30, 50, 70, 100];
+
+/** Below this the hotend refuses to extrude (cold-extrusion protection). */
+export const MIN_EXTRUDE_C = 170;
+
+/** Jog distances (mm) offered on the move screen. */
+export const JOG_STEPS_MM: readonly number[] = [1, 10];
+
 export function speedPreset(level: SpeedLevel | null): SpeedPreset | null {
   return SPEED_PRESETS.find((p) => p.level === level) ?? null;
 }
@@ -58,6 +67,7 @@ export function createUnknownState(source: DataSource, name = "P1S"): PrinterSta
     bed: { current: null, target: null },
     speedLevel: null,
     chamberLight: null,
+    fans: { part: null, aux: null, chamber: null, heatbreak: null },
     ams: { units: null, externalSpool: null, active: { kind: "unknown" } },
     printErrorCode: null,
     alerts: [],
