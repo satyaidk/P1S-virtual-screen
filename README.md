@@ -120,6 +120,7 @@ it to `.env.local` to change them:
 | `BAMBU_PRINTER_HOST`                         | Fixed printer IP, for networks that block discovery broadcasts                 |
 | `P1S_DATA_DIR`                               | Where the server keeps the session and chosen printer (default `.data`)        |
 | `P1S_ALLOW_LAN_CLIENTS`                      | `1` lets other devices on a trusted network open the console and display       |
+| `P1S_ALLOWED_HOSTS`                          | Exact hostnames allowed in (e.g. a Tailscale name) — see docs/remote-access.md |
 | `NEXT_PUBLIC_PRINTER_MODE`                   | `simulation` always uses the demo printer (development only)                   |
 | `P1S_SESSION_SECRET`                         | 32+ random characters; required for the hosted (Vercel) cookie sessions        |
 | `P1S_HOSTED`                                 | `1` forces hosted (cloud-only) behaviour locally, for testing                  |
@@ -263,6 +264,7 @@ See [docs/architecture.md](docs/architecture.md#trade-offs) and
 - [docs/architecture.md](docs/architecture.md): layers, data flow, trade-offs
 - [docs/protocol-notes.md](docs/protocol-notes.md): field mapping and command payloads
 - [docs/bridge-api.md](docs/bridge-api.md): bridge contract, environment variables, security
+- [docs/remote-access.md](docs/remote-access.md): control the printer from anywhere via Tailscale
 - [docs/hardware-porting.md](docs/hardware-porting.md): ESP32-S3/LVGL mapping
 
 ## Roadmap
@@ -274,7 +276,8 @@ See [docs/architecture.md](docs/architecture.md#trade-offs) and
 
 Known limitations:
 
-- Bambu Cloud connections are read-only; control requires LAN + Developer Mode.
+- Bambu Cloud connections are read-only; control requires LAN + Developer Mode. For control from
+  anywhere, reach the home computer over Tailscale ([docs/remote-access.md](docs/remote-access.md)).
 - Bambu's API sits behind Cloudflare and occasionally blocks non-browser clients; the console then
   shows "Blocked by Bambu's Cloudflare protection". Retry later or use LAN.
 - Job previews and print history need a Bambu account sign-in, and only exist for prints started
